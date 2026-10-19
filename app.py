@@ -134,7 +134,7 @@ def render(j,cues):
     try:
         update(j,status='exporting',progress=85,message='Incorporando legendas e exportando MP4…')
         ass_file(d/'captions.ass',cues)
-        ff(['-i',str(d/'edited.mp4'),'-vf',f"ass=filename='{d/'captions.ass'}'",'-c:v','libx264','-threads','1','-preset','veryfast','-crf','21','-pix_fmt','yuv420p','-c:a','copy','-movflags','+faststart',str(d/'final.tmp.mp4')])
+        ff(['-i',str(d/'edited.mp4'),'-vf',f"ass=filename='{d/'captions.ass'}'",'-c:v','libx264','-threads','1','-preset','veryfast','-tune','zerolatency','-crf','21','-pix_fmt','yuv420p','-c:a','copy','-movflags','+faststart',str(d/'final.tmp.mp4')])
         os.replace(d/'final.tmp.mp4',d/'final.mp4')
         update(j,status='done',progress=100,message='Seu Reels está pronto.',captions=cues)
     except Exception as e: fail(j,e)
@@ -145,6 +145,27 @@ def fail(j,e):
     msg=str(e) if isinstance(e,ValueError) else 'Processamento interrompido. Verifique FFmpeg, memória e acesso ao modelo Whisper. Consulte o registro do servidor.'
     update(j,status='error',message=msg,progress=0)
 
+def cut_video(j,source,d,keep):
+    # Bound decoder/encoder queues: never keep all trimmed source branches in RAM.
+    parts=[]
+    for i,(a,b) in enumerate(keep):
+        update(j,progress=25+int(25*i/len(keep)),message=f'Cortando trecho {i+1} de {len(keep)}…')
+        part=d/f'part-{i:03d}.mkv'
+        ff(['-ss',str(a),'-i',str(source),'-t',str(b-a),'-map','0:v:0','-map','0:a:0',
+            '-vf','scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=0x091715,setsar=1,fps=30',
+            '-af','aresample=48000','-ac','2','-c:v','libx264','-threads','1','-preset','veryfast','-tune','zerolatency',
+            '-crf','21','-pix_fmt','yuv420p','-c:a','pcm_s16le','-avoid_negative_ts','make_zero',str(part)])
+        parts.append(part)
+    listing=d/'parts.txt'
+    listing.write_text(''.join(f"file '{p.name}'\n" for p in parts))
+    update(j,progress=52,message='Unindo cortes e tratando o áudio…')
+    # Audio normalization is applied once to the entire sequence; video is copied.
+    ff(['-f','concat','-safe','0','-i',str(listing),'-map','0:v:0','-map','0:a:0','-c:v','copy',
+        '-af','afftdn=nf=-25,loudnorm=I=-16:TP=-1.5:LRA=11,aresample=48000','-c:a','aac','-b:a','160k',
+        '-movflags','+faststart',str(d/'edited.mp4')])
+    for p in parts:p.unlink(missing_ok=True)
+    listing.unlink(missing_ok=True)
+
 def process(j,review):
     d=DATA/j; source=d/'input'
     try:
@@ -153,16 +174,14 @@ def process(j,review):
         if not math.isfinite(duration) or not 0<duration<=600: raise ValueError('Envie um vídeo com até 10 minutos.')
         if not any(s['codec_type']=='video' for s in streams) or not any(s['codec_type']=='audio' for s in streams): raise ValueError('O arquivo precisa conter vídeo e áudio.')
         if not any(x in meta['format']['format_name'].split(',') for x in ['mov','mp4']): raise ValueError('O conteúdo do arquivo não é MP4 ou MOV.')
+        video_stream=next(stream for stream in streams if stream['codec_type']=='video')
+        if video_stream.get('width',0)*video_stream.get('height',0)>4096*2304:
+            raise ValueError('Este vídeo está acima de 4K. Exporte em 1080p ou 4K e envie novamente.')
         _,log=ff(['-i',str(source),'-vn','-af','silencedetect=noise=-35dB:d=0.6','-f','null','-'])
         keep=intervals(log,duration); edited=sum(b-a for a,b in keep)
         update(j,original_seconds=duration,edited_seconds=edited,cuts=max(0,len(keep)-1),progress=25,message='Removendo pausas e tratando áudio…')
-        chain=[]; links=[]
-        for i,(a,b) in enumerate(keep):
-            chain.extend([f'[0:v:0]trim=start={a}:end={b},setpts=PTS-STARTPTS[v{i}]',f'[0:a:0]atrim=start={a}:end={b},asetpts=PTS-STARTPTS[a{i}]'])
-            links.append(f'[v{i}][a{i}]')
-        chain.extend([''.join(links)+f'concat=n={len(keep)}:v=1:a=1[v][a]', '[v]scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=0x091715,setsar=1,fps=30[outv]', '[a]afftdn=nf=-25,loudnorm=I=-16:TP=-1.5:LRA=11,aresample=48000[outa]'])
-        (d/'filter.txt').write_text(';'.join(chain))
-        ff(['-i',str(source),'-filter_complex_threads','1','-filter_complex_script',str(d/'filter.txt'),'-map','[outv]','-map','[outa]','-c:v','libx264','-threads','1','-preset','veryfast','-crf','21','-pix_fmt','yuv420p','-c:a','aac','-b:a','160k','-movflags','+faststart',str(d/'edited.mp4')])
+        cut_video(j,source,d,keep)
+        update(j,edited_seconds=float(probe(d/'edited.mp4')['format']['duration']))
         update(j,progress=60,message='Transcrevendo a fala em português…')
         ff(['-i',str(d/'edited.mp4'),'-vn','-ac','1','-ar','16000',str(d/'voice.wav')])
         cues=json.loads(run([sys.executable,str(ROOT/'transcribe_task.py'),str(d/'voice.wav')])[0])
