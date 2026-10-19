@@ -71,3 +71,7 @@ PASSOU: API com filtros, datas, descarte de item antigo, duplicação, cache, fa
 PASSOU: DOM JavaScript com Canvas nativo: carrossel de cinco páginas a partir de ideia, foto carregada localmente, edição/paginação, adicionar/excluir página, ZIP/PNG, bloqueio de título que não cabe, notícia vinculada com fonte na descrição, Stories/quadrado e rascunho local. ZIP reaberto com Python, CRC íntegro, cinco PNGs 1080×1350 decodificados com Pillow e TXT com descrição/hashtags. Arte inspecionada visualmente. Não equivale a teste visual em Android real.
 
 PENDENTE POR ESCOPO GRATUITO: geração livre de imagens por IA, interpretação da foto, redação por modelo de linguagem e pesquisa jurídica aprofundada com análise/cruzamento da íntegra. Os recursos entregues são composição visual, roteiros por modelo e pesquisa de canais oficiais, rotulados na interface. Nenhuma API paga configurada.
+
+## Estilos e modelos favoritos — 1.8
+
+PASSOU: integração DOM/Canvas real com oito opções (sete renderizações distintas sem fotografia enviada), aplicação de descrição reconhecida, rejeição informativa de descrição não reconhecida, fonte/alinhamento/título/cor, favorito salvo e reaplicado com preservação do conteúdo, recuperação de favorito e rascunho após reinicialização do JavaScript e exclusão do favorito. Regressão de PNG, ZIP, foto local, carrossel, texto excedente, formatos e notícia vinculada passou. Favoritos não incluem foto nem texto das páginas. Prévia dos estilos inspecionada em mosaico PNG. Sem teste em aparelho Android real.

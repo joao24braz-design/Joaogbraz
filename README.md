@@ -73,3 +73,11 @@ Fotos JPEG/PNG/WebP de até 12 MB são decodificadas e reduzidas no navegador; n
 `GET /api/publications/research?q=&days=30` consulta quatro canais oficiais: API pública Incra e RSS Câmara Agropecuária/Meio Ambiente e STJ. Busca é limitada aos itens disponíveis nesses canais (30 do Incra e quantidade disponível nos RSS), filtrados por palavras, data e tema; não é busca exaustiva nem pesquisa jurisprudencial aprofundada. Fontes, falhas e datas são visíveis. Janela 1–90 dias, fuso São Paulo, cache de 15 minutos, deduplicação por URL, quatro conexões concorrentes, timeout de 10 s por fonte, limite de 2 MB/resposta, hosts e redirects HTTPS restritos. Não considera lei vigente só porque uma manchete menciona projeto. A seleção de notícia apenas vincula título/data/link ao rascunho; não analisa a íntegra. Sem custos de APIs.
 
 Testes: `python test_publications.py`; `npm install --prefix /tmp/jg-pub-test jsdom @napi-rs/canvas --no-audit --no-fund` e `NODE_PATH=/tmp/jg-pub-test/node_modules node test_publications.cjs`. Não são dependências de produção.
+
+## Estilos e modelos favoritos — 1.8
+
+Oito escolhas visuais: Editorial, Claro, Fotografia, Noturno, Campo/sálvia, Cobre, Minimalista/papel e Degradê. A capa usa foto local quando selecionada; sem imagem, Fotografia informa o fallback. Controles reais de alinhamento, fonte moderna/serifada, tamanho máximo do título e cor de destaque. O texto continua ajustado para caber e o download é bloqueado quando excede o espaço disponível.
+
+O balão de descrição aplica palavras-chave documentadas ao clicar em Aplicar descrição visual: estilos, claro/escuro, alinhamento, fonte, título grande/compacto e cores cobre/dourado/branco/#HEX. Mostra as instruções reconhecidas e avisa sobre as não interpretadas; não é geração livre por IA. A descrição sozinha não altera a arte enquanto não aplicada.
+
+Até 30 favoritos nomeados em `jg-publication-models-v1` no localStorage. Guarda estilo, ajustes, descrição, formato, contagem para futuras gerações, assinatura e foco da foto; exclui foto e textos. Carregar aplica à prévia preservando conteúdo e imagem atuais. Não há sincronização entre dispositivos. Rascunho e ajustes são restaurados após recarregar a página. Salvar denuncia falha de armazenamento sem afirmar que houve sucesso.
