@@ -121,3 +121,9 @@ Reels · vídeo MP4 exporta a arte estática vertical em H.264/yuv420p, 1080×19
 Aplicar proposta e Gerar arte com o visual da proposta renderizam Canvas e levam o foco à prévia. Aplicar mantém o visual escolhido salvo se a sugestão visual não estiver marcada; Gerar arte aplica explicitamente o visual proposto. Gerar arte com IA, junto à descrição visual, envia um briefing autorizado e aplica automaticamente a proposta com visual. Não é geração de fotografias: usa os oito estilos/controles e foto local opcional. Flags/limites/consentimentos existentes continuam valendo.
 
 Ajustes visuais simples continuam por palavras-chave; sem rascunho criam a arte a partir da ideia. Sem ideia ou sem instrução reconhecida, mostram motivo, sem fingir sucesso. A interpretação livre usa o botão com IA. Falhas na renderização aparecem também na prévia; erros na IA preservam a arte anterior. Scripts com versão para evitar combinação de HTML/JavaScript antigos após atualização.
+
+## Direção de arte editorial — 2.3
+
+Composição refeita com capa/manchete, editorial, lista de até três pontos, frase em destaque e fechamento. Em Editorial/Fotografia/Degradê, páginas internas alternam off-white e verde escuro; estilos de cor escolhidos explicitamente mantêm sua paleta. Foto local aparece na capa e no fechamento com degradê para preservar detalhes. Títulos maiores; corpo sem serifa; destaques em cobre; mais espaço negativo e rodapé discreto. Composição e expressão exata destacada são editáveis por página, persistem e sobrevivem à revisão do texto.
+
+A resposta da IA inclui layout e highlight opcionais e recebe limites editoriais mais curtos: capa até 14 palavras no corpo, miolo até 30, fechamento até 18. São instruções de geração, sem cortar textos que já existam. Transbordo continua bloqueando downloads. Resultados antigos continuam compatíveis e recebem composição automática. Não adiciona imagens geradas ou chamadas pagas.

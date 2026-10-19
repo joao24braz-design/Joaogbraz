@@ -99,3 +99,7 @@ FFmpeg real: exportação MP4 H.264/yuv420p, 1080×1920, duração 8 s e decodif
 PASSOU: DOM com Canvas nativo; rascunho vazio não declara sucesso, descrição simples com ideia cria arte, proposta só muda a arte ao aplicar, gerar visual da proposta muda pixels de verdade, pedido visual por IA aplica automaticamente texto/estilo, prévia recebe rolagem e foco, validação ao lado do botão, falha preserva pixels e conteúdo. Regressões de formatos, referências, favoritos e marketing passaram. Sem teste visual em Android real; navegador remoto bloqueado pela autenticação Basic (ERR_INVALID_AUTH_CREDENTIALS).
 
 Versão 2.1 online validada antes da atualização: endpoint MP4 retornou HTTP 200, H.264 1080×1920/8 s, decodificação completa.
+
+## Direção de arte editorial — 2.3
+
+PASSOU: cinco layouts reais em Canvas nativo, PNGs distintos, escolha manual de composição, expressão em destaque e preservação durante edição de texto; ZIP exportado. Mosaico de cinco páginas inspecionado visualmente; corrigida colisão da numeração com título e agrupados os pontos da lista. Regressão de referências, favoritos, PNG/ZIP, formatos únicos e carrossel, marketing e ações de arte passou. Resposta real anterior do Google aplicada e exportada com os novos layouts. Novo prompt editorial ainda requer amostragem real após implantação; não há garantia de limite de palavras nem validação jurídica automática.
