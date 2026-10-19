@@ -28,6 +28,7 @@ class EditOptions(BaseModel):
     zoom:Literal['off','auto','manual']='off'
     zoom_target:Literal['center','face']='center'
     zoom_percent:int=Field(default=18,ge=5,le=100)
+    zoom_transition:Literal['smooth','cut']='smooth'
     trim_start:float=Field(default=0,ge=0,allow_inf_nan=False)
     trim_end:float|None=Field(default=None,gt=0,allow_inf_nan=False)
     remove_ranges:list[ZoomMoment]=Field(default_factory=list,max_length=20)
@@ -75,15 +76,17 @@ def zoom_moments(cues,duration,options):
                 if add(c):break
     return sorted(chosen,key=lambda m:m['start'])
 
-def zoom_filter(moments,width,height,percent=18):
+def zoom_filter(moments,width,height,percent=18,transition='smooth'):
     terms=[];xs=[];ys=[]
     for m in moments:
         start=m['start']*30;end=m['end']*30;length=end-start
         amount=percent/100
-        terms.append(f"if(between(on,{start:.3f},{end:.3f}),{amount}*sin(PI*(on-{start:.3f})/{length:.3f}),0)")
+        active=f"gte(on,{start:.3f})*lt(on,{end:.3f})"
+        strength=str(amount) if transition=='cut' else f"{amount}*sin(PI*(on-{start:.3f})/{length:.3f})"
+        terms.append(f"if({active},{strength},0)")
         if 'face_x' in m:
-            xs.append(f"if(between(on,{start:.3f},{end:.3f}),{m['face_x']:.6f}-.5,0)")
-            ys.append(f"if(between(on,{start:.3f},{end:.3f}),{m['face_y']:.6f}-.5,0)")
+            xs.append(f"if({active},{m['face_x']:.6f}-.5,0)")
+            ys.append(f"if({active},{m['face_y']:.6f}-.5,0)")
     cx='0.5' + ('+' + '+'.join(xs) if xs else '')
     cy='0.5' + ('+' + '+'.join(ys) if ys else '')
     return "zoompan=z='1+"+'+'.join(terms)+f"':x='max(0,min(iw-iw/zoom,iw*({cx})-iw/zoom/2))':y='max(0,min(ih-ih/zoom,ih*({cy})-ih/zoom/2))':d=1:s={width}x{height}:fps=30"
@@ -340,7 +343,7 @@ def render(j,cues):
             zoom_note='Nenhum momento de zoom selecionado. Use momentos manuais para indicar onde aproximar.'
         if options.subtitles: ass_file(d/'captions.ass',output_cues,options,job.get('format','reels'))
         filters=[]
-        if moments: filters.append(zoom_filter(moments,job['width'],job['height'],options.zoom_percent))
+        if moments: filters.append(zoom_filter(moments,job['width'],job['height'],options.zoom_percent,options.zoom_transition))
         if options.speed!=1: filters.append(f'setpts=(PTS-STARTPTS)/{options.speed}')
         if options.subtitles: filters.append(f"ass=filename='{d/'captions.ass'}'")
         audio=['-c:a','copy'] if options.speed==1 else ['-af',f'atempo={options.speed}','-c:a','aac','-b:a','160k']

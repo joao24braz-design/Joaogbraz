@@ -57,3 +57,9 @@ PASSOU: vídeo sintético de 8 s, remover antes de 1 s, depois de 7 s e interval
 PASSOU: regressão de quatro formatos/velocidades/legendas e teste de interface anterior com três reexportações reais. Testes usam mídias sintéticas e legendas controladas; não medem acurácia do reconhecimento nem aparência em Android real.
 
 PASSOU: interface com cinco reexportações reais, incluindo slider de zoom 50%, marcação à esquerda/direita pela posição da prévia, intervalo em formato relógio, aplicação de cortes e restauração ao limpar.
+
+## Transição do zoom — 1.6
+
+PASSOU: FFmpeg real com padrão estático e zoom de 50%. Largura do marcador antes/entrada/meio/último frame/saída: zoom seco 40/60/60/60/40 pixels; suave 40/46/60/46/40 nos frames correspondentes de rampa. Intervalos adjacentes mantiveram 50% na fronteira sem duplicação. Valor inválido de transição rejeitado.
+
+PASSOU: teste de interface com cinco reexportações reais; seleção de zoom seco enviada à API e preservada na tela e nas opções do projeto após cortes manuais e nova exportação.

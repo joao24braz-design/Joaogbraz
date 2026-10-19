@@ -59,3 +59,7 @@ Intensidade do zoom de 5% a 100%, em passos de 1%, tanto para centro quanto rost
 Em Cortes manuais, abra a prévia e posicione o player para remover tudo à esquerda ou à direita. Também pode digitar tempos em segundos ou minutos:segundos e remover até 20 intervalos no meio. Aplicar cortes e ajustes exporta novamente. Limpar cortes manuais e aplicar restaura a versão após os cortes automáticos.
 
 Tempos são sempre relativos à prévia após cortes automáticos, antes da velocidade e dos cortes manuais. A base permanece intacta e os cortes não se acumulam. Intervalos sobrepostos são unidos e bordas arredondadas ao frame de 30 fps. Legendas e zoom manual são remapeados para o novo relógio; na ausência de tempos de palavras confiáveis, o texto de legendas parcialmente cortadas é distribuído proporcionalmente e uma mensagem pede revisão. `python test_manual_cuts.py` testa cortes e nova exportação com FFmpeg real.
+
+## Transição do zoom — 1.6
+
+Escolha Suave (aproxima e volta progressivamente) ou Seco (entra imediatamente na porcentagem escolhida e retorna de uma vez ao final). A escolha aparece também no modo automático, serve para centro/rosto e é preservada ao reaplicar ajustes. Suave permanece como padrão dos projetos sem escolha explícita. Intervalos adjacentes não somam suas intensidades no frame compartilhado. `python test_zoom_transition.py` mede os frames reais do FFmpeg.
