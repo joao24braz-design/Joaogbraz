@@ -1,0 +1,13 @@
+services:
+  studio:
+    build: .
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      WHISPER_MODEL: base
+      JG_HOSTS: localhost,127.0.0.1
+    volumes:
+      - whisper-models:/app/models
+    restart: unless-stopped
+volumes:
+  whisper-models:
