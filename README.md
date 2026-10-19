@@ -1,4 +1,4 @@
-# JG Reels AI 1.3
+# JG Reels AI 1.4
 
 Estúdio pessoal: https://jg-reels-ai.onrender.com (protegido por senha). Render gratuito, sem APIs pagas. O serviço pode adormecer e a edição usa CPU limitada. Nenhuma atualização de plano contratada.
 
@@ -13,7 +13,7 @@ Detecção de silêncios abaixo de -35 dB: modo Natural a partir de 600 ms com m
 - Modo automático: velocidade 1×, legenda Premium média off-white/cobre e zoom automático por palavras e frases de destaque. No modo personalizado, o zoom pode ser desligado.
 - Modo personalizado: 1× até 2× em passos de 0,1, preservando o tom da voz com atempo; tamanho pequeno/médio/grande; modelos Premium, Limpo ou Caixa; cores de texto e destaque.
 - Reels e Stories 9:16 com margens de legenda diferentes; feed 4:5 ou quadrado 1:1. Largura 2160 (4K), 1080 ou 720 pixels; imagem inteira com margens ou preenchimento com corte central.
-- Zoom central suave de até 10%. A opção de direcionar ao rosto usa OpenCV local em subprocesso, até três quadros reduzidos por momento, para localizar o maior rosto frontal e aproximar até 18%. Trechos sem detecção ficam sem zoom e geram aviso. A detecção não identifica pessoas nem acompanha o rosto continuamente. Automático seleciona até quatro momentos por palavras-chave e pontuação, sem compreensão semântica completa ou rastreamento contínuo. Personalizado aceita até oito intervalos em segundos do vídeo cortado antes de acelerar. Não há garantia de zoom quando nenhuma pista é encontrada.
+- Zoom central suave de até 10%. A opção de direcionar ao rosto usa OpenCV local em subprocesso, até três quadros reduzidos por momento, para localizar o maior rosto frontal e aproximar até 18%. Trechos sem detecção ficam sem zoom e geram aviso. A detecção não identifica pessoas nem acompanha o rosto continuamente. Automático seleciona até quatro momentos por palavras-chave, números, valores, comparações e pontuação; se necessário, distribui aproximações na fala. É uma heurística editorial, sem compreensão semântica completa ou rastreamento contínuo. Personalizado aceita até oito intervalos em segundos do vídeo cortado antes de acelerar. Vídeos curtos demais ainda podem ficar sem zoom; ao direcionar ao rosto, trechos sem detecção ficam sem aproximação. As sugestões de momentos ficam disponíveis na edição.
 - Alterações de estilo, zoom e velocidade podem ser reexportadas sem repetir cortes/transcrição. Formato, resolução e enquadramento são definidos no envio e exigem novo upload para mudar.
 
 O relógio canônico das legendas permanece no vídeo cortado, antes de acelerar. Na exportação, o mesmo fator divide timestamps do vídeo e das legendas e acelera o áudio. A prévia de revisão usa a velocidade original. ASS aplica tamanho e cor no vídeo real; a amostra HTML é apenas amostra de estilo. Saída H.264, AAC, yuv420p e MP4 faststart. Zoom e resoluções maiores aumentam o tempo de exportação. Reels/Stories 4K usam 2160×3840; feed usa 2160×2700 e quadrado 2160×2160. Aumentar a resolução não cria detalhes ausentes no original.
@@ -43,3 +43,11 @@ Render usa Dockerfile, porta 8000, JG_PASSWORD e RENDER_EXTERNAL_HOSTNAME. Auten
 ## Testes
 
 `python test_critical.py` valida fluxo original com legendas controladas. `python test_options.py` valida formatos, aceleração, preservação de frequência de áudio, zoom, estilos, cores, rejeição de parâmetros inválidos, decodificação e download. `python test_cancel.py` valida cancelamento real. `python test_edges_retakes.py` valida bordas e remoção de aviso de recomeço entre blocos de legenda, preservando a fala subsequente. `python test_captions_pauses.py` valida dispensa de transcrição, ativação/desativação posterior, áudio PCM sincronizado e remoção de pausas curtas. `python test_face_4k.py` valida detecção real de rosto fora do centro, fallback sem rosto e exportação 2160×3840 (usa o retrato de domínio público Grace Hopper distribuído com matplotlib apenas como fixture de teste). `python test_memory.py` mede processamento com entrada 4K e zoom 1080p. São necessários httpx e numpy para testes. Esses testes não medem acurácia do Whisper.
+
+## Ajustar um projeto pronto
+
+Aplicar ajustes e gerar MP4 aparece junto aos ajustes e na revisão. O botão principal também aplica ao projeto atual; selecionar outro arquivo inicia um novo envio. Reabrir os ajustes preserva texto e opções ainda não enviados. Cliques duplicados são bloqueados; respostas de consultas anteriores não sobrescrevem uma exportação nova. Erros aparecem junto aos botões.
+
+Zoom manual aceita segundos, vírgula decimal e relógio (ex.: 00:10-00:12; 20,5-22), ordena intervalos e rejeita sobreposições/tempos fora do vídeo. Usar momentos sugeridos preenche os intervalos para revisão. Após falha de exportação, o projeto que já tem mídia válida pode ser exportado novamente.
+
+Teste de interface: `npm install --prefix /tmp/jg-dom jsdom --no-audit --no-fund` e `NODE_PATH=/tmp/jg-dom/node_modules node test_ui.cjs`. Usa DOM JavaScript real com cliques, requisições HTTP locais e FFmpeg, transcrição controlada e mídia sintética. Não mede aparência em navegador Android real. `python test_reexport.py` verifica nova exportação e recuperação após erro simulado do encoder.

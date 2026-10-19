@@ -41,22 +41,34 @@ def output_size(resolution,format):
 def zoom_moments(cues,duration,options):
     if options.zoom=='off': return []
     if options.zoom=='manual':
+        if not options.zoom_moments:raise ValueError('Informe ao menos um intervalo de zoom ou escolha Automático.')
         previous=0
         for moment in options.zoom_moments:
             if moment.end<=moment.start or moment.start<previous or moment.end>duration:
                 raise ValueError('Use momentos de zoom em ordem, sem sobreposição, dentro do vídeo cortado.')
             previous=moment.end
         return [m.model_dump() for m in options.zoom_moments]
-    # Transparent editorial heuristic, not a claim to understand every important idea.
-    keywords=r'\b(atenção|cuidado|importante|direito|direitos|prazo|dívida|dívidas|risco|nunca|precisa|segredo|principal)\b'
-    ranked=sorted(cues,key=lambda c:(bool(re.search(keywords,c['text'],re.I))*3+bool(re.search('[!?]',c['text']))),reverse=True)
+    # Editorial cues plus spaced fallback: no claim of full semantic understanding.
+    def score(c):
+        text=c['text']
+        return (4*bool(re.search(r'\b(atenção|cuidado|importante|direito|direitos|prazo|dívida|dívidas|risco|nunca|precisa|segredo|principal)\b',text,re.I))
+            +3*bool(re.search(r'\d|\b(mil|milhão|milhões|dinheiro|valor|patrimônio|colheitadeira)\b',text,re.I))
+            +2*bool(re.search(r'\b(mas|porém|então|enquanto|só que)\b',text,re.I))
+            +2*bool(re.search('[!?]',text)))
     chosen=[]
-    for c in ranked:
-        if not re.search(keywords,c['text'],re.I) and not re.search('[!?]',c['text']): continue
-        start=max(0,c['start']-.15);end=min(duration,max(c['end']+.2,start+1.2),start+3.5)
-        if end-start<.4 or any(start<m['end']+4 and end>m['start']-4 for m in chosen): continue
-        chosen.append({'start':start,'end':end})
-        if len(chosen)>=4: break
+    def add(c):
+        start=max(.2,c['start']-.15);end=min(duration-.15,max(c['end']+.2,start+1.2),start+3.5)
+        if end-start<.6 or any(start<m['end']+4 and end>m['start']-4 for m in chosen):return False
+        chosen.append({'start':round(start,3),'end':round(end,3)});return True
+    for c in sorted(cues,key=score,reverse=True):
+        if score(c):add(c)
+        if len(chosen)>=4:break
+    target=min(4,max(1,int(duration/15)+1))
+    if cues and len(chosen)<target:
+        for fraction in [.3,.6,.82,.15]:
+            if len(chosen)>=target:break
+            for c in sorted(cues,key=lambda c:abs((c['start']+c['end'])/2-duration*fraction)):
+                if add(c):break
     return sorted(chosen,key=lambda m:m['start'])
 
 def zoom_filter(moments,width,height):
@@ -228,6 +240,7 @@ def render(j,cues):
         update(j,status='exporting',progress=85,message='Incorporando legendas e exportando MP4…')
         job=get(j);options=EditOptions(**job.get('options',{}))
         moments=zoom_moments(cues,job['edited_seconds'],options)
+        update(j,planned_zoom=moments)
         requested_moments=len(moments)
         if options.zoom_target=='face' and moments:
             update(j,message='Localizando o rosto nos momentos de zoom…')
@@ -351,7 +364,7 @@ def process(j,review):
         keep=intervals(log,duration,mode,jobs[j].get('options',{}).get('trim_edges',True)); edited=sum(b-a for a,b in keep)
         update(j,original_seconds=duration,edited_seconds=edited,cuts=max(0,len(keep)-1),progress=25,message='Removendo pausas e tratando áudio…')
         cut_video(j,source,d,keep)
-        update(j,edited_seconds=float(probe(d/'edited.mp4')['format']['duration']))
+        update(j,edited_seconds=float(probe(d/'edited.mp4')['format']['duration']),media_ready=True)
         zoom_moments([],jobs[j]['edited_seconds'],EditOptions(**jobs[j].get('options',{})))
         options=EditOptions(**jobs[j].get('options',{}))
         cues=job_transcribe(j) if options.subtitles or options.zoom=='auto' or options.remove_retakes else []
@@ -454,7 +467,13 @@ def cancel(j:str):
         return {'status':jobs[j]['status']}
 
 @app.get('/api/jobs/{j}')
-def status(j:str): return get(j)
+def status(j:str):
+    job=get(j)
+    job['can_export']=job['status'] in ['review','done'] or (job['status']=='error' and job.get('media_ready',False))
+    if job.get('edited_seconds') and job.get('captions'):
+        job['suggested_zoom']=zoom_moments(job['captions'],job['edited_seconds'],EditOptions(zoom='auto'))
+    else:job['suggested_zoom']=[]
+    return job
 
 class Cue(BaseModel):
     start:float=Field(ge=0,allow_inf_nan=False)
@@ -468,7 +487,7 @@ class Export(BaseModel):
 def export(j:str,body:Export):
     with guard:
         job=get(j)
-        if job['status'] not in ['review','done']: raise HTTPException(409,'Aguarde o processamento.')
+        if job['status'] not in ['review','done'] and not (job['status']=='error' and job.get('media_ready')): raise HTTPException(409,'Aguarde o processamento.')
         previous=0
         for c in body.captions:
             if c.end<=c.start or c.start<previous or c.end>job['edited_seconds']+0.15: raise HTTPException(422,'Tempos de legenda inválidos.')
@@ -485,7 +504,7 @@ def export(j:str,body:Export):
 def video(j:str,download:bool=False,preview:bool=False):
     job=get(j)
     if preview:
-        if job['status'] not in ['review','done']: raise HTTPException(409,'Prévia ainda indisponível.')
+        if job['status'] not in ['review','done'] and not (job['status']=='error' and job.get('media_ready')): raise HTTPException(409,'Prévia ainda indisponível.')
         p=DATA/j/'edited.mp4'
     else:
         if job['status']!='done': raise HTTPException(409,'Exportação ainda indisponível.')

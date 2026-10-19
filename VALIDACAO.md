@@ -39,3 +39,13 @@ Teste de reconhecimento real (áudio privado de gravação já processada, 52,5 
 Ajuste de bordas implementado por áudio: 180 ms antes/160 ms depois. Regra opcional de último recomeço explícito (“errei… começar de novo”) usa tempos de palavras. Não existe detecção visual de boca fechada; permanece pendente. Não há detecção semântica geral de tentativas abandonadas.
 
 PASSOU: teste HTTP/FFmpeg com silêncio inicial/final e aviso de recomeço atravessando blocos de legenda. Regra retirou 3,32 s; final 2,081 s, legenda “Fala correta agora.” com início 0,18 s. Nenhum corte por apenas mencionar “erro” ou “errei na análise” sem reinício. MP4 decodificado e download disponível.
+
+PUBLICAÇÃO 1.3: commit aa9473b5e48a4414f984ef528116227f2f73ab85, deploy dep-dbb2qh0n74is73c2bek0 live. Teste remoto final usou somente fala genérica sintetizada com Flite (inglês com reconhecimento configurado para português; não mede acurácia linguística). Upload, Whisper base real, revisão, exportar sem legenda e depois com legenda, H.264/AAC 720×1280, download e decodificação passaram. Entrada 6 s → saída 2,566 s; 2 blocos de legenda. Sem legenda/zoom, bytes iguais à prévia, comprovando que texto não foi incorporado. Projeto sintético excluído.
+
+A revisão automática de permissões bloqueou a verificação que reenviaria um trecho privado do projeto anterior ao serviço Render, pois faltava autorização específica para esse reenvio. O bloqueio não foi contornado; foi criado um teste alternativo com fala sintética genérica e sem gravações do usuário. A comparação local anterior não fornece taxa de acerto.
+
+## Correção de zoom e reaplicação — versão 1.4
+
+PASSOU: teste de interface com jsdom, HTTP e FFmpeg reais. Projeto já concluído → editar → zoom manual em formato relógio/vírgula → corrigir legenda → aplicar. Três exportações por cliques nos botões de ajustes, principal e revisão. Abrir edição novamente preservou alterações; clique duplicado bloqueado; tempo inválido mostrou mensagem junto aos dois botões e não enviou HTTP. Sugestões automáticas preenchidas e aplicadas. Não representa teste visual em navegador Android.
+
+PASSOU: backend retomou exportação após falha intencional de encoder, preservando a mídia intermediária. Zoom automático gerado para fala sem palavras-chave e para comparação com valores numéricos. Quatro formatos/estilos/velocidades da regressão passaram. Versão mantém dados temporários: é necessário baixar resultados antes de publicar.
