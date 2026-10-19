@@ -3,6 +3,7 @@ import signal, sys, asyncio, base64, contextlib, json, logging, math, os, re, se
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Literal
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -147,12 +148,13 @@ def fail(j,e):
 
 def cut_video(j,source,d,keep):
     # Bound decoder/encoder queues: never keep all trimmed source branches in RAM.
+    width=jobs[j].get('width',1080);height=jobs[j].get('height',1920)
     parts=[]
     for i,(a,b) in enumerate(keep):
         update(j,progress=25+int(25*i/len(keep)),message=f'Cortando trecho {i+1} de {len(keep)}…')
         part=d/f'part-{i:03d}.mkv'
         ff(['-ss',str(a),'-i',str(source),'-t',str(b-a),'-map','0:v:0','-map','0:a:0',
-            '-vf','scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=0x091715,setsar=1,fps=30',
+            '-vf',f'scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=0x091715,setsar=1,fps=30',
             '-af','aresample=48000','-ac','2','-c:v','libx264','-threads','1','-preset','ultrafast','-tune','zerolatency',
             '-crf','18','-pix_fmt','yuv420p','-c:a','pcm_s16le','-avoid_negative_ts','make_zero',str(part)])
         parts.append(part)
@@ -240,12 +242,12 @@ async def security(request,call_next):
 def health(): return {'ffmpeg':bool(shutil.which('ffmpeg')),'transcription':'Whisper local','retention_hours':24}
 
 @app.post('/api/jobs')
-async def upload(request:Request,review:bool=False):
+async def upload(request:Request,review:bool=False,resolution:Literal['1080','720']='1080'):
     if request.headers.get('x-file-ext','').lower() not in ['mp4','mov']: raise HTTPException(415,'Use MP4 ou MOV.')
     with guard:
         if sum(x['status'] in ['uploading','queued','processing','exporting'] for x in jobs.values())>=2: raise HTTPException(429,'A fila está cheia. Aguarde a edição atual.')
         if len(jobs)>=10: raise HTTPException(429,'Limite de arquivos temporários atingido. Exclua um projeto.')
-        j=secrets.token_hex(24); cancel_events[j]=threading.Event(); jobs[j]={'id':j,'created':time.time(),'status':'uploading','progress':0,'message':'Recebendo vídeo…','captions':[]}
+        j=secrets.token_hex(24); cancel_events[j]=threading.Event(); jobs[j]={'id':j,'created':time.time(),'status':'uploading','progress':0,'message':'Recebendo vídeo…','captions':[],'resolution':resolution,'width':720 if resolution=='720' else 1080,'height':1280 if resolution=='720' else 1920}
     d=DATA/j; d.mkdir(mode=0o700); size=0
     try:
         with (d/'input').open('wb') as out:
