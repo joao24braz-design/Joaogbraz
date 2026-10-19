@@ -1,5 +1,5 @@
 """JG Reels AI: single-user local service. No paid APIs."""
-import sys, asyncio, base64, contextlib, json, logging, math, os, re, secrets, shutil, subprocess, threading, time
+import signal, sys, asyncio, base64, contextlib, json, logging, math, os, re, secrets, shutil, subprocess, threading, time
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -14,17 +14,62 @@ MAX_BYTES=300*1024*1024; TTL=24*3600
 jobs={}; guard=threading.RLock(); pool=ThreadPoolExecutor(max_workers=1)
 model=None
 
+cancel_events={}; active_processes={}; job_futures={}; worker_context=threading.local()
+
+class JobCancelled(Exception): pass
+
+def stop_process(p):
+    def send(sig):
+        if p.poll() is None:
+            with contextlib.suppress(ProcessLookupError): os.killpg(p.pid,sig)
+    send(signal.SIGTERM)
+    timer=threading.Timer(2,lambda:send(signal.SIGKILL)); timer.daemon=True; timer.start()
+
+def finish_cancel(j):
+    with guard:
+        if j not in jobs: return
+        shutil.rmtree(DATA/j,ignore_errors=True)
+        jobs[j].update(status='cancelled',progress=0,message='Processamento cancelado. Você pode enviar outro vídeo.')
+
+def execute_job(j,fn,*args):
+    worker_context.job=j
+    try:
+        if cancel_events[j].is_set(): raise JobCancelled()
+        fn(j,*args)
+    except JobCancelled: pass
+    finally:
+        if cancel_events.get(j) and cancel_events[j].is_set(): finish_cancel(j)
+        with guard:
+            job_futures.pop(j,None); active_processes.pop(j,None)
+        worker_context.job=None
+
 def run(args, timeout=1800):
-    p=subprocess.run(args,capture_output=True,text=True,timeout=timeout)
-    if p.returncode:
-        logging.error('Media/subprocess failed: %s',p.stderr[-1500:])
-        raise RuntimeError('Falha no processamento de mídia. Verifique se o arquivo está íntegro.')
-    return p.stdout,p.stderr
+    j=getattr(worker_context,'job',None)
+    event=cancel_events.get(j)
+    with guard:
+        if event and event.is_set(): raise JobCancelled()
+        p=subprocess.Popen(args,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,start_new_session=True)
+        if j: active_processes[j]=p
+    try:
+        try: out,err=p.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            os.killpg(p.pid,signal.SIGKILL); p.communicate(); raise RuntimeError('Tempo limite de processamento atingido.')
+        if event and event.is_set(): raise JobCancelled()
+        if p.returncode:
+            logging.error('Media/subprocess failed: %s',err[-1500:])
+            raise RuntimeError('Falha no processamento de mídia. Verifique se o arquivo está íntegro.')
+        return out,err
+    finally:
+        if j:
+            with guard:
+                if active_processes.get(j) is p: active_processes.pop(j,None)
 
 def ff(args): return run(['ffmpeg','-nostdin','-hide_banner','-y','-threads','1','-filter_threads','1',*args])
 def probe(p): return json.loads(run(['ffprobe','-v','error','-show_format','-show_streams','-of','json',str(p)],60)[0])
 def update(j,**kw):
-    with guard: jobs[j].update(kw)
+    with guard:
+        if cancel_events.get(j) and cancel_events[j].is_set(): raise JobCancelled()
+        jobs[j].update(kw)
 def get(j):
     with guard:
         if j not in jobs: raise HTTPException(404,'Projeto expirado ou inexistente.')
@@ -95,6 +140,7 @@ def render(j,cues):
     except Exception as e: fail(j,e)
 
 def fail(j,e):
+    if isinstance(e,JobCancelled) or (cancel_events.get(j) and cancel_events[j].is_set()): return
     logging.exception('Job %s failed',j)
     msg=str(e) if isinstance(e,ValueError) else 'Processamento interrompido. Verifique FFmpeg, memória e acesso ao modelo Whisper. Consulte o registro do servidor.'
     update(j,status='error',message=msg,progress=0)
@@ -129,8 +175,10 @@ async def cleaner():
     while True:
         await asyncio.sleep(60)
         with guard:
-            expired=[j for j,v in jobs.items() if time.time()-v['created']>TTL and v['status'] not in ['processing','queued','exporting','uploading']]
-            for j in expired: shutil.rmtree(DATA/j,ignore_errors=True); del jobs[j]
+            expired=[j for j,v in jobs.items() if time.time()-v['created']>TTL and v['status'] not in ['processing','queued','exporting','uploading','cancelling']]
+            for j in expired:
+                shutil.rmtree(DATA/j,ignore_errors=True); del jobs[j]
+                cancel_events.pop(j,None)
 
 @asynccontextmanager
 async def lifespan(app):
@@ -139,6 +187,9 @@ async def lifespan(app):
         if d.is_dir() and re.fullmatch('[a-f0-9]{48}',d.name): shutil.rmtree(d)
     t=asyncio.create_task(cleaner())
     yield
+    with guard:
+        for event in cancel_events.values(): event.set()
+        for proc in active_processes.values(): stop_process(proc)
     t.cancel()
     with contextlib.suppress(asyncio.CancelledError): await t
 
@@ -175,7 +226,7 @@ async def upload(request:Request,review:bool=False):
     with guard:
         if sum(x['status'] in ['uploading','queued','processing','exporting'] for x in jobs.values())>=2: raise HTTPException(429,'A fila está cheia. Aguarde a edição atual.')
         if len(jobs)>=10: raise HTTPException(429,'Limite de arquivos temporários atingido. Exclua um projeto.')
-        j=secrets.token_hex(24); jobs[j]={'id':j,'created':time.time(),'status':'uploading','progress':0,'message':'Recebendo vídeo…','captions':[]}
+        j=secrets.token_hex(24); cancel_events[j]=threading.Event(); jobs[j]={'id':j,'created':time.time(),'status':'uploading','progress':0,'message':'Recebendo vídeo…','captions':[]}
     d=DATA/j; d.mkdir(mode=0o700); size=0
     try:
         with (d/'input').open('wb') as out:
@@ -185,11 +236,28 @@ async def upload(request:Request,review:bool=False):
                 out.write(chunk)
         if size<1000: raise HTTPException(400,'Arquivo vazio ou inválido.')
         update(j,status='queued',message='Aguardando processamento…')
-        pool.submit(process,j,review)
+        with guard: job_futures[j]=pool.submit(execute_job,j,process,review)
         return {'id':j}
     except BaseException:
-        with guard: jobs.pop(j,None)
+        with guard: jobs.pop(j,None); cancel_events.pop(j,None)
         shutil.rmtree(d,ignore_errors=True); raise
+
+@app.post('/api/jobs/{j}/cancel')
+def cancel(j:str):
+    with guard:
+        job=get(j)
+        if job['status'] in ['cancelled','cancelling']: return {'status':job['status']}
+        if job['status'] not in ['queued','processing','exporting']:
+            raise HTTPException(409,'Este processamento já terminou. Atualize o resultado.')
+        cancel_events[j].set()
+        jobs[j].update(status='cancelling',message='Cancelando processamento…')
+        future=job_futures.get(j)
+        queued_cancelled=future is not None and future.cancel()
+        proc=active_processes.get(j)
+        if proc: stop_process(proc)
+        if queued_cancelled:
+            job_futures.pop(j,None); finish_cancel(j)
+        return {'status':jobs[j]['status']}
 
 @app.get('/api/jobs/{j}')
 def status(j:str): return get(j)
@@ -210,7 +278,8 @@ def export(j:str,body:Export):
             if c.end<=c.start or c.start<previous or c.end>job['edited_seconds']+0.15: raise HTTPException(422,'Tempos de legenda inválidos.')
             previous=c.end
         update(j,status='queued',message='Exportação na fila…')
-    pool.submit(render,j,[c.model_dump() for c in body.captions]); return {'ok':True}
+    with guard: job_futures[j]=pool.submit(execute_job,j,render,[c.model_dump() for c in body.captions])
+    return {'ok':True}
 
 @app.get('/api/jobs/{j}/video')
 def video(j:str,download:bool=False,preview:bool=False):
@@ -227,8 +296,8 @@ def video(j:str,download:bool=False,preview:bool=False):
 def delete(j:str):
     with guard:
         job=get(j)
-        if job['status'] in ['uploading','queued','processing','exporting']: raise HTTPException(409,'Aguarde o processamento para excluir.')
-        shutil.rmtree(DATA/j); del jobs[j]
+        if job['status'] in ['uploading','queued','processing','exporting','cancelling']: raise HTTPException(409,'Aguarde o processamento para excluir.')
+        shutil.rmtree(DATA/j,ignore_errors=True); del jobs[j]; cancel_events.pop(j,None)
     return {'ok':True}
 
 app.mount('/',StaticFiles(directory=ROOT/'static',html=True),name='interface')
