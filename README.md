@@ -1,17 +1,17 @@
 # JG Reels AI
 
-Editor pessoal web de Reels. Upload MP4/MOV, remoção de pausas, tratamento de áudio, Whisper local em português, revisão opcional de legendas e MP4 H.264/AAC 1080×1920.
+Editor pessoal web com FFmpeg e Whisper local: upload MP4/MOV, cortes de pausas, áudio normalizado, legendas em português, revisão opcional e exportação MP4 H.264/AAC 1080×1920.
 
-## Execução
+Aplicativo: https://jg-reels-ai.onrender.com — acesso protegido por senha. As credenciais são entregues ao proprietário fora deste repositório.
 
-Docker: `docker compose up --build -d`. Abra http://localhost:8000.
+## Hospedagem gratuita
 
-## Hospedagem
+Um único serviço Docker no Render, plan free. Modelo Whisper tiny incluído na imagem. Transcrição em subprocesso para liberar memória antes da exportação. Nenhuma API de IA paga. Recursos sujeitos às limitações de CPU, memória, disponibilidade e uso do plano gratuito do provedor. Não existe garantia de operação ilimitada ou suporte a vídeos longos nesse plano. Suspensão por inatividade pode demorar a reabrir e apaga os arquivos temporários.
 
-Dockerfile com modelo Whisper tiny incluído na imagem e transcrição em processo separado para liberar memória antes da exportação. Servidor único, fila limitada, sem APIs pagas. Configurar JG_PASSWORD com senha forte por variável de ambiente. RENDER_EXTERNAL_HOSTNAME é reconhecido automaticamente. Sem disco pago. Arquivos temporários expiram em 24 horas e são apagados em reinícios.
+## Execução local
 
-Somente plano gratuito autorizado. A disponibilidade está sujeita aos limites do host: pouca CPU/memória, suspensão por inatividade e possíveis reinícios. Validação em produção ainda pendente. O aplicativo não publica no Instagram e não adiciona música automaticamente.
+`docker compose up --build -d` e abrir http://localhost:8000. Para acesso externo configurar JG_PASSWORD, JG_HOSTS e HTTPS. No Render, RENDER_EXTERNAL_HOSTNAME é reconhecido automaticamente. Sem disco pago. Limite de upload 300 MB/10 minutos; recomenda-se começar com Reels curtos. Fila com um trabalhador e dez projetos temporários. Arquivos expiram em 24h ou em reinícios.
 
-## Testes
+## Validação
 
-`python test_critical.py` após instalar requirements.txt e httpx. Testa FFmpeg real e HTTP com áudio sintético e legendas controladas. Pipeline Whisper tiny real também foi exercitado com fala sintetizada. Precisão em voz humana brasileira e Android precisam ser validadas. Sem teste de navegador realizado neste ambiente.
+Ver VALIDACAO.md. Teste de edição real na implantação concluído com MP4 baixado e decodificado. Voz humana em português e Android real aguardam validação de uso. Não adiciona música nem publica no Instagram.
