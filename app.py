@@ -27,6 +27,11 @@ class EditOptions(BaseModel):
     accent_color:str=Field(default='#C49C7B',pattern=r'^#[0-9a-fA-F]{6}$')
     zoom:Literal['off','auto','manual']='off'
     zoom_target:Literal['center','face']='center'
+    transcription_hint:str=Field(default='',max_length=300)
+    subtitles:bool=True
+    pause_mode:Literal['natural','dynamic']='natural'
+    trim_edges:bool=True
+    remove_retakes:bool=True
     zoom_moments:list[ZoomMoment]=Field(default_factory=list,max_length=8)
 
 def output_size(resolution,format):
@@ -128,21 +133,34 @@ def get(j):
         if j not in jobs: raise HTTPException(404,'Projeto expirado ou inexistente.')
         return dict(jobs[j])
 
-def intervals(log,duration):
+def pause_settings(mode):
+    return (.3,.08,.10) if mode=='dynamic' else (.6,.14,.18)
+
+def intervals(log,duration,mode='natural',trim_edges=True):
+    threshold,pad_after,pad_before=pause_settings(mode)
     gaps=[]; start=None
     for kind,value in re.findall(r'silence_(start|end):\s*([\d.]+)',log):
         if kind=='start': start=float(value)
         elif start is not None: gaps.append((start,min(duration,float(value)))); start=None
     if start is not None: gaps.append((start,duration))
-    keep=[]; pos=0
+    keep=[];pos=0
     for a,b in gaps:
-        if b-a<0.6: continue
-        left=min(duration,a+0.14); right=max(left,b-0.18)
-        if left>pos+0.04: keep.append((pos,left))
+        leading=a<=.03;trailing=b>=duration-.03
+        if leading or trailing:
+            if not trim_edges:continue
+            if leading and trailing:raise ValueError('Não foi detectada fala suficiente. Confira o áudio do vídeo.')
+            if leading:
+                pos=max(pos,b-.18);continue
+            left=min(duration,a+.16)
+            if left>pos+.04:keep.append((pos,left))
+            pos=duration;continue
+        if b-a<threshold:continue
+        left=min(duration,a+pad_after);right=max(left,b-pad_before)
+        if left>pos+.04:keep.append((pos,left))
         pos=max(pos,right)
-    if duration-pos>0.04: keep.append((pos,duration))
-    if sum(b-a for a,b in keep)<0.35: raise ValueError('Não foi detectada fala suficiente. Confira o áudio do vídeo.')
-    if len(keep)>200: raise ValueError('Muitas pausas detectadas. Use um vídeo mais curto ou com menos ruído.')
+    if duration-pos>.04:keep.append((pos,duration))
+    if sum(b-a for a,b in keep)<.35:raise ValueError('Não foi detectada fala suficiente. Confira o áudio do vídeo.')
+    if len(keep)>200:raise ValueError('Muitas pausas detectadas. Use um vídeo mais curto ou com menos ruído.')
     return keep
 
 def stamp(t):
@@ -170,25 +188,37 @@ def ass_file(path,cues,options=None,format='reels'):
         lines.append(f"Dialogue: 0,{stamp(c['start']/options.speed)},{stamp(c['end']/options.speed)},Premium,,0,0,0,,{{\\fad(70,70)}}{text}")
     path.write_text(header+'\n'.join(lines),encoding='utf-8')
 
-def transcribe(audio):
+def transcribe(audio,hint=""):
     global model
     from faster_whisper import WhisperModel
     if model is None:
-        model=WhisperModel(os.getenv('WHISPER_MODEL','base'),device='cpu',compute_type='int8',cpu_threads=2,download_root=os.getenv('WHISPER_CACHE',str(ROOT/'models')))
+        model=WhisperModel(os.getenv('WHISPER_MODEL','base'),device='cpu',compute_type='int8',cpu_threads=1,num_workers=1,download_root=os.getenv('WHISPER_CACHE',str(ROOT/'models')))
     import wave
     import numpy as np
     with wave.open(str(audio),'rb') as source:
         samples=np.frombuffer(source.readframes(source.getnframes()),dtype=np.int16).astype(np.float32)/32768.0
-    segments,_=model.transcribe(samples,language='pt',beam_size=3,word_timestamps=True,condition_on_previous_text=False)
+    # Standard 30-second context and bounded fallback avoid brittle short windows
+    # and repetitive decoding on difficult speech. Hints are optional, not replacements.
+    segments,_=model.transcribe(samples,language='pt',task='transcribe',beam_size=5,best_of=5,temperature=(0.0,0.2,0.4),word_timestamps=True,condition_on_previous_text=False,initial_prompt=hint.strip() or None)
     cues=[]
     for s in segments:
         words=[w for w in (s.words or []) if w.word.strip()]
         batch=[]
         for w in words:
             if batch and (len(batch)>=6 or w.end-batch[0].start>2.8 or len(' '.join(x.word for x in batch))+len(w.word)>44):
-                cues.append({'start':batch[0].start,'end':batch[-1].end,'text':' '.join(x.word.strip() for x in batch)}); batch=[]
+                cues.append({'start':batch[0].start,'end':batch[-1].end,'text':' '.join(x.word.strip() for x in batch),'words':[{'start':x.start,'end':x.end,'text':x.word.strip()} for x in batch]}); batch=[]
             batch.append(w)
-        if batch: cues.append({'start':batch[0].start,'end':batch[-1].end,'text':' '.join(x.word.strip() for x in batch)})
+        if batch: cues.append({'start':batch[0].start,'end':batch[-1].end,'text':' '.join(x.word.strip() for x in batch),'words':[{'start':x.start,'end':x.end,'text':x.word.strip()} for x in batch]})
+    # Keep revision/export on a monotonic clock bounded by the actual PCM.
+    duration=len(samples)/16000
+    previous=0
+    normalized=[]
+    for cue in cues:
+        start=min(duration,max(previous,cue['start']))
+        end=min(duration,max(start,cue['end']))
+        if end>start:
+            normalized.append({**cue,'start':start,'end':end});previous=end
+    cues=normalized
     if not cues: raise ValueError('A transcrição não reconheceu fala. Confira o áudio e tente novamente.')
     return cues
 
@@ -208,13 +238,16 @@ def render(j,cues):
             zoom_note=f'Rosto não detectado em {requested_moments-len(moments)} trecho(s); esses trechos ficaram sem zoom.'
         elif options.zoom!='off' and not requested_moments:
             zoom_note='Nenhum momento de zoom selecionado. Use momentos manuais para indicar onde aproximar.'
-        ass_file(d/'captions.ass',cues,options,job.get('format','reels'))
+        if options.subtitles: ass_file(d/'captions.ass',cues,options,job.get('format','reels'))
         filters=[]
         if moments: filters.append(zoom_filter(moments,job['width'],job['height']))
         if options.speed!=1: filters.append(f'setpts=(PTS-STARTPTS)/{options.speed}')
-        filters.append(f"ass=filename='{d/'captions.ass'}'")
+        if options.subtitles: filters.append(f"ass=filename='{d/'captions.ass'}'")
         audio=['-c:a','copy'] if options.speed==1 else ['-af',f'atempo={options.speed}','-c:a','aac','-b:a','160k']
-        ff(['-i',str(d/'edited.mp4'),'-vf',','.join(filters),'-c:v','libx264','-threads','1','-preset','veryfast','-tune','zerolatency','-crf','21','-pix_fmt','yuv420p',*audio,'-movflags','+faststart',str(d/'final.tmp.mp4')])
+        if filters:
+            ff(['-i',str(d/'edited.mp4'),'-vf',','.join(filters),'-c:v','libx264','-threads','1','-preset','veryfast','-tune','zerolatency','-crf','21','-pix_fmt','yuv420p',*audio,'-movflags','+faststart',str(d/'final.tmp.mp4')])
+        else:
+            shutil.copyfile(d/'edited.mp4',d/'final.tmp.mp4')
         os.replace(d/'final.tmp.mp4',d/'final.mp4')
         update(j,status='done',progress=100,message='Seu vídeo está pronto.',captions=cues,output_seconds=float(probe(d/'final.mp4')['format']['duration']),applied_zoom=moments,zoom_note=zoom_note)
     except Exception as e: fail(j,e)
@@ -245,9 +278,61 @@ def cut_video(j,source,d,keep):
     # Audio normalization is applied once to the entire sequence; video is copied.
     ff(['-f','concat','-safe','0','-i',str(listing),'-map','0:v:0','-map','0:a:0','-c:v','copy',
         '-af','afftdn=nf=-25,loudnorm=I=-16:TP=-1.5:LRA=11,aresample=48000','-c:a','aac','-b:a','160k',
-        '-movflags','+faststart',str(d/'edited.mp4')])
+        '-movflags','+faststart',str(d/'edited.mp4'),
+        '-map','0:a:0','-vn','-ac','1','-ar','16000','-c:a','pcm_s16le',str(d/'voice.wav')])
     for p in parts:p.unlink(missing_ok=True)
     listing.unlink(missing_ok=True)
+
+def restart_cut(cues,duration):
+    words=[w for c in cues for w in c.get('words',[])]
+    tokens=[re.sub(r'[^a-záéíóúâêôãõç]','',w['text'].lower()) for w in words]
+    chosen=None
+    for i,t in enumerate(tokens):
+        if t not in ['errei','errou']:continue
+        # Require an explicit first-person restart near the admission of error.
+        if t!='errei':continue
+        window=' '.join(tokens[i:i+14])
+        match=re.search(r'\b(?:vou )?(?:começar|comecar|recomeçar|recomecar) (?:de novo|novamente|do zero)\b',window)
+        if not match:continue
+        end_idx=i+len(window[:match.end()].split())-1
+        if end_idx>=len(words)-1 or words[end_idx]['end']-words[i]['start']>7:continue
+        nxt=words[end_idx+1]
+        cut=min(nxt['start'],max(words[end_idx]['end']+.02,nxt['start']-.18))
+        if duration-cut>=1:chosen=cut
+    return chosen
+
+def remove_abandoned_take(j,cues):
+    d=DATA/j;duration=jobs[j]['edited_seconds'];cut=restart_cut(cues,duration)
+    if cut is None:return cues
+    update(j,progress=72,message='Removendo a tentativa anterior ao aviso de recomeço…')
+    # The explicit “errei ... começar de novo” means a new full take. Preserve
+    # the source upload; this optional rule never guesses an unannounced error.
+    ff(['-ss',str(cut),'-i',str(d/'edited.mp4'),'-map','0:v:0','-map','0:a:0','-c:v','libx264','-threads','1','-preset','ultrafast','-tune','zerolatency','-crf','18','-c:a','aac','-b:a','160k','-movflags','+faststart',str(d/'retake.mp4')])
+    ff(['-ss',str(cut),'-i',str(d/'voice.wav'),'-c:a','pcm_s16le',str(d/'retake.wav')])
+    os.replace(d/'retake.mp4',d/'edited.mp4');os.replace(d/'retake.wav',d/'voice.wav')
+    new_duration=float(probe(d/'edited.mp4')['format']['duration']);adjusted=[]
+    for cue in cues:
+        remaining=[w for w in cue.get('words',[]) if w['start']>=cut-.01]
+        if not remaining:continue
+        start=max(0,remaining[0]['start']-cut);end=min(new_duration,remaining[-1]['end']-cut)
+        if end>start:adjusted.append({'start':start,'end':end,'text':' '.join(w['text'] for w in remaining)})
+    if not adjusted:raise ValueError('Não foi possível confirmar a fala após o aviso de recomeço. Reenvie com a detecção de recomeços desativada.')
+    update(j,edited_seconds=new_duration,retake_removed_seconds=cut)
+    return adjusted
+
+def job_transcribe(j):
+    update(j,status='processing',progress=60,message='Transcrevendo em português com o modelo mais preciso…')
+    hint=jobs[j].get('options',{}).get('transcription_hint','')
+    return json.loads(run([sys.executable,str(ROOT/'transcribe_task.py'),str(DATA/j/'voice.wav'),hint])[0])
+
+def prepare_export(j,cues):
+    try:
+        options=EditOptions(**jobs[j].get('options',{}))
+        if not cues and (options.subtitles or options.zoom=='auto'):
+            cues=job_transcribe(j)
+            update(j,captions=cues)
+        render(j,cues)
+    except Exception as e:fail(j,e)
 
 def process(j,review):
     d=DATA/j; source=d/'input'
@@ -260,17 +345,20 @@ def process(j,review):
         video_stream=next(stream for stream in streams if stream['codec_type']=='video')
         if video_stream.get('width',0)*video_stream.get('height',0)>4096*2304:
             raise ValueError('Este vídeo está acima de 4K. Exporte em 1080p ou 4K e envie novamente.')
-        _,log=ff(['-i',str(source),'-vn','-af','silencedetect=noise=-35dB:d=0.6','-f','null','-'])
-        keep=intervals(log,duration); edited=sum(b-a for a,b in keep)
+        mode=jobs[j].get('options',{}).get('pause_mode','natural')
+        threshold,_,_=pause_settings(mode)
+        _,log=ff(['-i',str(source),'-vn','-af','silencedetect=noise=-35dB:d=0.12','-f','null','-'])
+        keep=intervals(log,duration,mode,jobs[j].get('options',{}).get('trim_edges',True)); edited=sum(b-a for a,b in keep)
         update(j,original_seconds=duration,edited_seconds=edited,cuts=max(0,len(keep)-1),progress=25,message='Removendo pausas e tratando áudio…')
         cut_video(j,source,d,keep)
         update(j,edited_seconds=float(probe(d/'edited.mp4')['format']['duration']))
         zoom_moments([],jobs[j]['edited_seconds'],EditOptions(**jobs[j].get('options',{})))
-        update(j,progress=60,message='Transcrevendo a fala em português…')
-        ff(['-i',str(d/'edited.mp4'),'-vn','-ac','1','-ar','16000',str(d/'voice.wav')])
-        cues=json.loads(run([sys.executable,str(ROOT/'transcribe_task.py'),str(d/'voice.wav')])[0])
+        options=EditOptions(**jobs[j].get('options',{}))
+        cues=job_transcribe(j) if options.subtitles or options.zoom=='auto' or options.remove_retakes else []
+        if options.remove_retakes:
+            cues=remove_abandoned_take(j,cues)
         update(j,captions=cues)
-        if review: update(j,status='review',progress=75,message='Confira as legendas e clique em exportar.')
+        if review and options.subtitles: update(j,status='review',progress=75,message='Confira as legendas e clique em exportar.')
         else: render(j,cues)
     except Exception as e: fail(j,e)
 
@@ -373,7 +461,7 @@ class Cue(BaseModel):
     end:float=Field(gt=0,allow_inf_nan=False)
     text:str=Field(min_length=1,max_length=160)
 class Export(BaseModel):
-    captions:list[Cue]=Field(min_length=1,max_length=2500)
+    captions:list[Cue]=Field(default_factory=list,max_length=2500)
     options:EditOptions|None=None
 
 @app.post('/api/jobs/{j}/export')
@@ -386,10 +474,11 @@ def export(j:str,body:Export):
             if c.end<=c.start or c.start<previous or c.end>job['edited_seconds']+0.15: raise HTTPException(422,'Tempos de legenda inválidos.')
             previous=c.end
         options=body.options or EditOptions(**job.get('options',{}))
+        options=options.model_copy(update={'pause_mode':job.get('options',{}).get('pause_mode','natural'),'transcription_hint':job.get('options',{}).get('transcription_hint',''),'trim_edges':job.get('options',{}).get('trim_edges',True),'remove_retakes':job.get('options',{}).get('remove_retakes',True)})
         try: zoom_moments([c.model_dump() for c in body.captions],job['edited_seconds'],options)
         except ValueError as e: raise HTTPException(422,str(e))
         update(j,status='queued',message='Exportação na fila…',options=options.model_dump())
-    with guard: job_futures[j]=pool.submit(execute_job,j,render,[c.model_dump() for c in body.captions])
+    with guard: job_futures[j]=pool.submit(execute_job,j,prepare_export,[c.model_dump() for c in body.captions])
     return {'ok':True}
 
 @app.get('/api/jobs/{j}/video')
