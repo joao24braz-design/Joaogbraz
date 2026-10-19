@@ -49,3 +49,11 @@ A revisão automática de permissões bloqueou a verificação que reenviaria um
 PASSOU: teste de interface com jsdom, HTTP e FFmpeg reais. Projeto já concluído → editar → zoom manual em formato relógio/vírgula → corrigir legenda → aplicar. Três exportações por cliques nos botões de ajustes, principal e revisão. Abrir edição novamente preservou alterações; clique duplicado bloqueado; tempo inválido mostrou mensagem junto aos dois botões e não enviou HTTP. Sugestões automáticas preenchidas e aplicadas. Não representa teste visual em navegador Android.
 
 PASSOU: backend retomou exportação após falha intencional de encoder, preservando a mídia intermediária. Zoom automático gerado para fala sem palavras-chave e para comparação com valores numéricos. Quatro formatos/estilos/velocidades da regressão passaram. Versão mantém dados temporários: é necessário baixar resultados antes de publicar.
+
+## Zoom e cortes manuais — 1.5
+
+PASSOU: vídeo sintético de 8 s, remover antes de 1 s, depois de 7 s e intervalo de 3–5 s produziu 4 s selecionados. Exportação com velocidade 1,2×, zoom 50% e 100%, H.264/AAC e decodificação passaram. Frequências de áudio confirmaram a seleção dos trechos corretos. MP4 base permaneceu byte a byte intacto; limpar cortes restaurou a base. Intervalos sobrepostos unidos, parâmetros inválidos rejeitados, palavras e momentos de zoom remapeados e temporários removidos.
+
+PASSOU: regressão de quatro formatos/velocidades/legendas e teste de interface anterior com três reexportações reais. Testes usam mídias sintéticas e legendas controladas; não medem acurácia do reconhecimento nem aparência em Android real.
+
+PASSOU: interface com cinco reexportações reais, incluindo slider de zoom 50%, marcação à esquerda/direita pela posição da prévia, intervalo em formato relógio, aplicação de cortes e restauração ao limpar.

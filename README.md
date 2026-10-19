@@ -51,3 +51,11 @@ Aplicar ajustes e gerar MP4 aparece junto aos ajustes e na revisão. O botão pr
 Zoom manual aceita segundos, vírgula decimal e relógio (ex.: 00:10-00:12; 20,5-22), ordena intervalos e rejeita sobreposições/tempos fora do vídeo. Usar momentos sugeridos preenche os intervalos para revisão. Após falha de exportação, o projeto que já tem mídia válida pode ser exportado novamente.
 
 Teste de interface: `npm install --prefix /tmp/jg-dom jsdom --no-audit --no-fund` e `NODE_PATH=/tmp/jg-dom/node_modules node test_ui.cjs`. Usa DOM JavaScript real com cliques, requisições HTTP locais e FFmpeg, transcrição controlada e mídia sintética. Não mede aparência em navegador Android real. `python test_reexport.py` verifica nova exportação e recuperação após erro simulado do encoder.
+
+## Zoom e cortes manuais — 1.5
+
+Intensidade do zoom de 5% a 100%, em passos de 1%, tanto para centro quanto rosto. A porcentagem representa o aumento máximo suave: 50% chega a 1,5×; 100% a 2×.
+
+Em Cortes manuais, abra a prévia e posicione o player para remover tudo à esquerda ou à direita. Também pode digitar tempos em segundos ou minutos:segundos e remover até 20 intervalos no meio. Aplicar cortes e ajustes exporta novamente. Limpar cortes manuais e aplicar restaura a versão após os cortes automáticos.
+
+Tempos são sempre relativos à prévia após cortes automáticos, antes da velocidade e dos cortes manuais. A base permanece intacta e os cortes não se acumulam. Intervalos sobrepostos são unidos e bordas arredondadas ao frame de 30 fps. Legendas e zoom manual são remapeados para o novo relógio; na ausência de tempos de palavras confiáveis, o texto de legendas parcialmente cortadas é distribuído proporcionalmente e uma mensagem pede revisão. `python test_manual_cuts.py` testa cortes e nova exportação com FFmpeg real.

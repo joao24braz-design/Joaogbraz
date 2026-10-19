@@ -27,6 +27,10 @@ class EditOptions(BaseModel):
     accent_color:str=Field(default='#C49C7B',pattern=r'^#[0-9a-fA-F]{6}$')
     zoom:Literal['off','auto','manual']='off'
     zoom_target:Literal['center','face']='center'
+    zoom_percent:int=Field(default=18,ge=5,le=100)
+    trim_start:float=Field(default=0,ge=0,allow_inf_nan=False)
+    trim_end:float|None=Field(default=None,gt=0,allow_inf_nan=False)
+    remove_ranges:list[ZoomMoment]=Field(default_factory=list,max_length=20)
     transcription_hint:str=Field(default='',max_length=300)
     subtitles:bool=True
     pause_mode:Literal['natural','dynamic']='natural'
@@ -71,11 +75,11 @@ def zoom_moments(cues,duration,options):
                 if add(c):break
     return sorted(chosen,key=lambda m:m['start'])
 
-def zoom_filter(moments,width,height):
+def zoom_filter(moments,width,height,percent=18):
     terms=[];xs=[];ys=[]
     for m in moments:
         start=m['start']*30;end=m['end']*30;length=end-start
-        amount=.18 if 'face_x' in m else .10
+        amount=percent/100
         terms.append(f"if(between(on,{start:.3f},{end:.3f}),{amount}*sin(PI*(on-{start:.3f})/{length:.3f}),0)")
         if 'face_x' in m:
             xs.append(f"if(between(on,{start:.3f},{end:.3f}),{m['face_x']:.6f}-.5,0)")
@@ -234,36 +238,120 @@ def transcribe(audio,hint=""):
     if not cues: raise ValueError('A transcrição não reconheceu fala. Confira o áudio e tente novamente.')
     return cues
 
+def manual_keep(duration,options):
+    start=options.trim_start;end=duration if options.trim_end is None else options.trim_end
+    if not 0<=start<end<=duration+.001:
+        raise ValueError('Os cortes de início/final precisam estar dentro da prévia e deixar um trecho para manter.')
+    end=min(end,duration);removed=[]
+    for cut in sorted(options.remove_ranges,key=lambda x:x.start):
+        if cut.end<=cut.start or cut.end>duration+.001:
+            raise ValueError('Informe intervalos válidos de remoção dentro da prévia.')
+        left=max(start,cut.start);right=min(end,cut.end)
+        if right<=left:continue
+        if removed and left<=removed[-1][1]:removed[-1]=(removed[-1][0],max(right,removed[-1][1]))
+        else:removed.append((left,right))
+    keep=[];position=start
+    for left,right in removed:
+        if left-position>.001:keep.append((position,left))
+        position=right
+    if end-position>.001:keep.append((position,end))
+    if keep!=[(0,duration)]:
+        # Match the 30 fps edit timeline so concatenated cuts do not accumulate
+        # sub-frame rounding drift against the remapped caption clock.
+        keep=[(max(0,round(a*30)/30),min(duration,round(b*30)/30)) for a,b in keep]
+        keep=[(a,b) for a,b in keep if b-a>.001]
+    if sum(b-a for a,b in keep)<.35:raise ValueError('Os cortes precisam deixar pelo menos 0,35 segundo de vídeo.')
+    return keep
+
+def map_moments(moments,keep):
+    mapped=[];offset=0
+    for a,b in keep:
+        for moment in moments:
+            start=max(a,moment['start']);end=min(b,moment['end'])
+            if end-start>.04:mapped.append({**moment,'start':start-a+offset,'end':end-a+offset})
+        offset+=b-a
+    return sorted(mapped,key=lambda m:m['start'])
+
+def map_captions(cues,keep):
+    mapped=[];offset=0;estimated=False
+    for a,b in keep:
+        for cue in cues:
+            start=max(a,cue['start']);end=min(b,cue['end'])
+            if end-start<=.01:continue
+            text=cue['text']
+            if start>cue['start']+.001 or end<cue['end']-.001:
+                words=cue.get('words')
+                if words:
+                    selected=[w for w in words if start<=(w['start']+w['end'])/2<end]
+                    if not selected:continue
+                    text=' '.join(w['text'] for w in selected)
+                else:
+                    # Edited text without reliable word times: approximate only the
+                    # intersected cue, with an explicit review notice in the result.
+                    tokens=text.split();length=cue['end']-cue['start']
+                    selected=[word for i,word in enumerate(tokens) if start<=cue['start']+length*(i+.5)/len(tokens)<end]
+                    if not selected:continue
+                    text=' '.join(selected);estimated=True
+            mapped.append({'start':start-a+offset,'end':end-a+offset,'text':text})
+        offset+=b-a
+    return mapped,estimated
+
+def cut_for_export(j,keep):
+    d=DATA/j;duration=jobs[j]['edited_seconds']
+    if len(keep)==1 and abs(keep[0][0])<.001 and abs(keep[0][1]-duration)<.001:return d/'edited.mp4'
+    parts=[];listing=d/'manual-parts.txt';output=d/'manual.mp4'
+    try:
+        for i,(a,b) in enumerate(keep):
+            update(j,message=f'Aplicando corte manual {i+1} de {len(keep)}…')
+            part=d/f'manual-part-{i:03d}.mkv';parts.append(part)
+            ff(['-ss',str(a),'-i',str(d/'edited.mp4'),'-t',str(b-a),'-map','0:v:0','-map','0:a:0',
+                '-vf','setpts=PTS-STARTPTS','-af','asetpts=PTS-STARTPTS,aresample=48000','-ac','2',
+                '-c:v','libx264','-threads','1','-preset','ultrafast','-tune','zerolatency','-crf','18','-pix_fmt','yuv420p',
+                '-c:a','pcm_s16le','-avoid_negative_ts','make_zero',str(part)])
+        listing.write_text(''.join(f"file '{part.name}'\n" for part in parts))
+        ff(['-f','concat','-safe','0','-i',str(listing),'-map','0:v:0','-map','0:a:0','-c:v','copy','-c:a','aac','-b:a','160k','-movflags','+faststart',str(output)])
+        return output
+    finally:
+        for part in parts:part.unlink(missing_ok=True)
+        listing.unlink(missing_ok=True)
+
 def render(j,cues):
     d=DATA/j
     try:
         update(j,status='exporting',progress=85,message='Incorporando legendas e exportando MP4…')
         job=get(j);options=EditOptions(**job.get('options',{}))
-        moments=zoom_moments(cues,job['edited_seconds'],options)
+        keep=manual_keep(job['edited_seconds'],options)
+        selected_seconds=sum(b-a for a,b in keep)
+        output_cues,estimated=map_captions(cues,keep)
+        source=cut_for_export(j,keep)
+        if options.zoom=='manual':
+            moments=map_moments(zoom_moments(cues,job['edited_seconds'],options),keep)
+        else:moments=zoom_moments(output_cues,selected_seconds,options)
         update(j,planned_zoom=moments)
         requested_moments=len(moments)
         if options.zoom_target=='face' and moments:
             update(j,message='Localizando o rosto nos momentos de zoom…')
-            moments=json.loads(run([sys.executable,str(ROOT/'face_task.py'),str(d/'edited.mp4'),json.dumps(moments)],300)[0])
+            moments=json.loads(run([sys.executable,str(ROOT/'face_task.py'),str(source),json.dumps(moments)],300)[0])
             update(j,message='Incorporando legendas e exportando MP4…')
         zoom_note=''
         if options.zoom_target=='face' and requested_moments>len(moments):
             zoom_note=f'Rosto não detectado em {requested_moments-len(moments)} trecho(s); esses trechos ficaram sem zoom.'
         elif options.zoom!='off' and not requested_moments:
             zoom_note='Nenhum momento de zoom selecionado. Use momentos manuais para indicar onde aproximar.'
-        if options.subtitles: ass_file(d/'captions.ass',cues,options,job.get('format','reels'))
+        if options.subtitles: ass_file(d/'captions.ass',output_cues,options,job.get('format','reels'))
         filters=[]
-        if moments: filters.append(zoom_filter(moments,job['width'],job['height']))
+        if moments: filters.append(zoom_filter(moments,job['width'],job['height'],options.zoom_percent))
         if options.speed!=1: filters.append(f'setpts=(PTS-STARTPTS)/{options.speed}')
         if options.subtitles: filters.append(f"ass=filename='{d/'captions.ass'}'")
         audio=['-c:a','copy'] if options.speed==1 else ['-af',f'atempo={options.speed}','-c:a','aac','-b:a','160k']
         if filters:
-            ff(['-i',str(d/'edited.mp4'),'-vf',','.join(filters),'-c:v','libx264','-threads','1','-preset','veryfast','-tune','zerolatency','-crf','21','-pix_fmt','yuv420p',*audio,'-movflags','+faststart',str(d/'final.tmp.mp4')])
+            ff(['-i',str(source),'-vf',','.join(filters),'-c:v','libx264','-threads','1','-preset','veryfast','-tune','zerolatency','-crf','21','-pix_fmt','yuv420p',*audio,'-movflags','+faststart',str(d/'final.tmp.mp4')])
         else:
-            shutil.copyfile(d/'edited.mp4',d/'final.tmp.mp4')
+            shutil.copyfile(source,d/'final.tmp.mp4')
         os.replace(d/'final.tmp.mp4',d/'final.mp4')
-        update(j,status='done',progress=100,message='Seu vídeo está pronto.',captions=cues,output_seconds=float(probe(d/'final.mp4')['format']['duration']),applied_zoom=moments,zoom_note=zoom_note)
+        update(j,status='done',progress=100,message='Seu vídeo está pronto.',captions=cues,output_seconds=float(probe(d/'final.mp4')['format']['duration']),applied_zoom=moments,zoom_note=zoom_note,applied_zoom_percent=options.zoom_percent,selected_seconds=selected_seconds,manual_removed_seconds=job['edited_seconds']-selected_seconds,caption_cut_note='Um corte atravessou texto sem tempos de palavras confiáveis; confira as legendas do resultado.' if estimated and options.subtitles else '')
     except Exception as e: fail(j,e)
+    finally:(d/'manual.mp4').unlink(missing_ok=True)
 
 def fail(j,e):
     if isinstance(e,JobCancelled) or (cancel_events.get(j) and cancel_events[j].is_set()): return
@@ -494,10 +582,20 @@ def export(j:str,body:Export):
             previous=c.end
         options=body.options or EditOptions(**job.get('options',{}))
         options=options.model_copy(update={'pause_mode':job.get('options',{}).get('pause_mode','natural'),'transcription_hint':job.get('options',{}).get('transcription_hint',''),'trim_edges':job.get('options',{}).get('trim_edges',True),'remove_retakes':job.get('options',{}).get('remove_retakes',True)})
-        try: zoom_moments([c.model_dump() for c in body.captions],job['edited_seconds'],options)
+        try:
+            manual_keep(job['edited_seconds'],options)
+            zoom_moments([c.model_dump() for c in body.captions],job['edited_seconds'],options)
         except ValueError as e: raise HTTPException(422,str(e))
         update(j,status='queued',message='Exportação na fila…',options=options.model_dump())
-    with guard: job_futures[j]=pool.submit(execute_job,j,prepare_export,[c.model_dump() for c in body.captions])
+    # Preserve trusted word times when text is unchanged or corrected word-for-word.
+    previous={(c['start'],c['end']):c for c in job.get('captions',[])}
+    cues=[]
+    for caption in body.captions:
+        cue=caption.model_dump();old=previous.get((cue['start'],cue['end']),{});words=old.get('words',[])
+        tokens=cue['text'].split()
+        if words and len(tokens)==len(words):cue['words']=[{**w,'text':word} for w,word in zip(words,tokens)]
+        cues.append(cue)
+    with guard: job_futures[j]=pool.submit(execute_job,j,prepare_export,cues)
     return {'ok':True}
 
 @app.get('/api/jobs/{j}/video')
