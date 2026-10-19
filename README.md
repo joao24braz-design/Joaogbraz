@@ -109,3 +109,9 @@ Não há grounding/pesquisa de íntegra nem geração de fotografias nesta integ
 
 Testes: `python test_marketing_ai.py` e `NODE_PATH=/tmp/jg-pub-test/node_modules node test_marketing_ui.cjs`. Sem chamada ao Google durante os testes.
 
+
+## Formatos únicos e Reels — 2.1
+
+Páginas e controles de paginação aparecem somente em Carrossel, de 2 a 10 páginas. Stories, capa, quadrado e Reels usam uma composição. Ao trocar um carrossel já criado por formato único, só a primeira página fica visível e é exportada; as demais permanecem no rascunho para voltar a Carrossel. Gerar um novo roteiro substitui o conteúdo como antes.
+
+Reels · vídeo MP4 exporta a arte estática vertical em H.264/yuv420p, 1080×1920, 30 fps, 8 segundos, sem áudio/animação. Botão envia apenas a composição PNG ao próprio servidor para FFmpeg; temporários são removidos após a resposta. Não gera filmagens, música ou narração. Limite 10 MB, uma exportação por vez, bloqueada durante edição de vídeo ativa, timeout 50 s. O editor de filmagens continua na aba Edição de vídeo.

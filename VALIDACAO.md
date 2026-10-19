@@ -87,3 +87,9 @@ PASSOU: cinco testes de API com respostas simuladas: configuração, limites, co
 REDE REAL em 19/10/2026: projeto Free Tier sem faturamento confirmado no Google AI Studio; segredo configurado no Render. 3.8 Flash apresentou timeout/503 alta demanda, 2.5 Flash retornou 404 para conta nova. 3.1 Flash-Lite respondeu e gerou roteiro de cinco páginas em português sobre preparação para arrendamento rural. A primeira resposta exigiu normalização de hashtags e descarte de observações de referência quando nenhuma imagem foi enviada; corrigidos. Nova chamada recebeu 503 de alta demanda, tratado com mensagem específica e preservação do rascunho. Não mede consistência jurídica ou garantia de disponibilidade.
 
 PASSOU, REDE REAL: nova geração com cinco referências JPEG sintéticas levou 13 segundos, retornou cinco páginas, descrição, hashtags e observações. Aplicação do resultado real no editor Canvas permitiu exportar PNG/ZIP. ZIP reaberto, CRC íntegro e cinco PNGs 1080×1350 decodificados. Imagens de usuários não foram utilizadas. Sem teste visual em Android real.
+
+## Formatos únicos e Reels — 2.1
+
+Testes DOM/Canvas: quatro formatos únicos ocultam/desabilitam páginas e controles de múltiplas páginas; briefing IA usa count=1; ZIP contém exatamente um PNG. Voltar ao carrossel preserva cinco páginas anteriores. Quantidades 2,4,6,8,9,10 geradas; botão MP4 com bloqueio de clique duplicado. Regressão do editor, referências e marketing passou.
+
+FFmpeg real: exportação MP4 H.264/yuv420p, 1080×1920, duração 8 s e decodificação completa. API rejeita formato/tamanho inválidos, concorrência e edição de vídeo ativa. Sem teste visual em aparelho Android real.

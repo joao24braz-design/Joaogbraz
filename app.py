@@ -626,4 +626,46 @@ app.include_router(publications_router)
 from marketing_ai import router as marketing_router
 app.include_router(marketing_router)
 
+publication_reel_lock=threading.Lock()
+
+def publication_reel_encode(raw:bytes):
+    import tempfile
+    from fastapi.responses import Response
+    with tempfile.TemporaryDirectory(prefix='jg-reel-') as folder:
+        root=Path(folder); source=root/'art.png'; output=root/'reel.mp4'
+        source.write_bytes(raw)
+        try:
+            subprocess.run(['ffmpeg','-hide_banner','-loglevel','error','-nostdin',
+                '-threads','1','-filter_threads','1','-loop','1','-framerate','30',
+                '-i',str(source),'-t','8','-an','-c:v','libx264','-threads','1',
+                '-preset','ultrafast','-tune','stillimage','-crf','23',
+                '-pix_fmt','yuv420p','-movflags','+faststart','-y',str(output)],
+                check=True,stdout=subprocess.DEVNULL,stderr=subprocess.PIPE,timeout=50)
+            return Response(output.read_bytes(),media_type='video/mp4',headers={
+                'Content-Disposition':'attachment; filename="JG-reels.mp4"','Cache-Control':'no-store'})
+        except (subprocess.SubprocessError,OSError):
+            raise HTTPException(502,'Não foi possível gerar o Reels. Seu rascunho foi preservado.')
+
+@app.post('/api/publications/reel')
+async def publication_reel(request:Request):
+    if request.headers.get('content-type','').split(';')[0]!='image/png':
+        raise HTTPException(415,'Envie a arte em PNG.')
+    if not publication_reel_lock.acquire(blocking=False):
+        raise HTTPException(429,'Um Reels está sendo exportado. Aguarde.')
+    try:
+        with guard:
+            if any(j['status'] in ['uploading','queued','processing','exporting','cancelling'] for j in jobs.values()):
+                raise HTTPException(409,'Aguarde a edição de vídeo atual para exportar o Reels.')
+        raw=bytearray()
+        async for chunk in request.stream():
+            raw.extend(chunk)
+            if len(raw)>10*1024*1024:raise HTTPException(413,'A arte excedeu 10 MB.')
+        import struct
+        if (len(raw)<33 or raw[:16]!=b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR'
+            or struct.unpack('>II',raw[16:24])!=(1080,1920)):
+            raise HTTPException(422,'A arte deve ser um PNG vertical 1080 × 1920.')
+        from starlette.concurrency import run_in_threadpool
+        return await run_in_threadpool(publication_reel_encode,bytes(raw))
+    finally:publication_reel_lock.release()
+
 app.mount('/',StaticFiles(directory=ROOT/'static',html=True),name='interface')
