@@ -15,6 +15,49 @@ MAX_BYTES=300*1024*1024; TTL=24*3600
 jobs={}; guard=threading.RLock(); pool=ThreadPoolExecutor(max_workers=1)
 model=None
 
+class ZoomMoment(BaseModel):
+    start:float=Field(ge=0,allow_inf_nan=False)
+    end:float=Field(gt=0,allow_inf_nan=False)
+
+class EditOptions(BaseModel):
+    speed:float=Field(default=1,ge=1,le=2,allow_inf_nan=False,multiple_of=0.1)
+    subtitle_size:Literal['small','medium','large']='medium'
+    subtitle_style:Literal['premium','clean','box']='premium'
+    text_color:str=Field(default='#F7F5F4',pattern=r'^#[0-9a-fA-F]{6}$')
+    accent_color:str=Field(default='#C49C7B',pattern=r'^#[0-9a-fA-F]{6}$')
+    zoom:Literal['off','auto','manual']='off'
+    zoom_moments:list[ZoomMoment]=Field(default_factory=list,max_length=8)
+
+def output_size(resolution,format):
+    width=int(resolution)
+    return width,{'reels':width*16//9,'story':width*16//9,'feed':width*5//4,'square':width}[format]
+
+def zoom_moments(cues,duration,options):
+    if options.zoom=='off': return []
+    if options.zoom=='manual':
+        previous=0
+        for moment in options.zoom_moments:
+            if moment.end<=moment.start or moment.start<previous or moment.end>duration:
+                raise ValueError('Use momentos de zoom em ordem, sem sobreposição, dentro do vídeo cortado.')
+            previous=moment.end
+        return [m.model_dump() for m in options.zoom_moments]
+    # Transparent editorial heuristic, not a claim to understand every important idea.
+    keywords=r'\b(atenção|cuidado|importante|direito|direitos|prazo|dívida|dívidas|risco|nunca|precisa|segredo|principal)\b'
+    ranked=sorted(cues,key=lambda c:(bool(re.search(keywords,c['text'],re.I))*3+bool(re.search('[!?]',c['text']))),reverse=True)
+    chosen=[]
+    for c in ranked:
+        if not re.search(keywords,c['text'],re.I) and not re.search('[!?]',c['text']): continue
+        start=max(0,c['start']-.15);end=min(duration,max(c['end']+.2,start+1.2),start+3.5)
+        if end-start<.4 or any(start<m['end']+4 and end>m['start']-4 for m in chosen): continue
+        chosen.append({'start':start,'end':end})
+        if len(chosen)>=4: break
+    return sorted(chosen,key=lambda m:m['start'])
+
+def zoom_filter(moments,width,height):
+    # One frame in/out, centered zoom up to 10%, smooth entrance and exit.
+    terms=[f"if(between(on,{m['start']*30:.3f},{m['end']*30:.3f}),0.10*sin(PI*(on-{m['start']*30:.3f})/{(m['end']-m['start'])*30:.3f}),0)" for m in moments]
+    return "zoompan=z='1+"+'+'.join(terms)+f"':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s={width}x{height}:fps=30"
+
 cancel_events={}; active_processes={}; job_futures={}; worker_context=threading.local()
 
 class JobCancelled(Exception): pass
@@ -96,16 +139,26 @@ def intervals(log,duration):
 def stamp(t):
     cs=round(max(0,t)*100); return f'{cs//360000}:{cs//6000%60:02}:{cs//100%60:02}.{cs%100:02}'
 
-def ass_file(path,cues):
-    header='''[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\nWrapStyle: 0\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Premium,DejaVu Sans,58,&H00F4F5F7,&H007DA9C4,&H00110F0B,&H90000000,-1,0,0,0,100,100,0,0,1,3,1,2,100,190,370,1\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n'''
+def ass_color(color):
+    return '&H00'+color[5:7]+color[3:5]+color[1:3]
+
+def ass_file(path,cues,options=None,format='reels'):
+    options=options or EditOptions()
+    canvas_height={'reels':1920,'story':1920,'feed':1350,'square':1080}[format]
+    margin={'reels':370,'story':320,'feed':150,'square':120}[format]
+    size={'small':44,'medium':58,'large':72}[options.subtitle_size]
+    primary=ass_color(options.text_color);accent=ass_color(options.accent_color)
+    border=3 if options.subtitle_style=='box' else 1
+    outline=14 if border==3 else 3
+    header=f'''[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: {canvas_height}\nWrapStyle: 0\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Premium,DejaVu Sans,{size},{primary},{accent},&H00110F0B,&H90000000,-1,0,0,0,100,100,0,0,{border},{outline},1,2,90,170,{margin},1\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n'''
     lines=[]
     for c in cues:
         words=c['text'].replace('\\','').replace('{','').replace('}','').split()
         if not words: continue
-        # Copper emphasis without guessing word timing; transcription supplies cue boundaries.
-        words[-1]=r'{\c&H007DA9C4&}'+words[-1]+r'{\c&H00F4F5F7&}'
+        if options.subtitle_style=='premium':
+            words[-1]='{\\c'+accent+'&}'+words[-1]+'{\\c'+primary+'&}'
         text=' '.join(words)
-        lines.append(f"Dialogue: 0,{stamp(c['start'])},{stamp(c['end'])},Premium,,0,0,0,,{{\\fad(70,70)}}{text}")
+        lines.append(f"Dialogue: 0,{stamp(c['start']/options.speed)},{stamp(c['end']/options.speed)},Premium,,0,0,0,,{{\\fad(70,70)}}{text}")
     path.write_text(header+'\n'.join(lines),encoding='utf-8')
 
 def transcribe(audio):
@@ -134,10 +187,17 @@ def render(j,cues):
     d=DATA/j
     try:
         update(j,status='exporting',progress=85,message='Incorporando legendas e exportando MP4…')
-        ass_file(d/'captions.ass',cues)
-        ff(['-i',str(d/'edited.mp4'),'-vf',f"ass=filename='{d/'captions.ass'}'",'-c:v','libx264','-threads','1','-preset','veryfast','-tune','zerolatency','-crf','21','-pix_fmt','yuv420p','-c:a','copy','-movflags','+faststart',str(d/'final.tmp.mp4')])
+        job=get(j);options=EditOptions(**job.get('options',{}))
+        moments=zoom_moments(cues,job['edited_seconds'],options)
+        ass_file(d/'captions.ass',cues,options,job.get('format','reels'))
+        filters=[]
+        if moments: filters.append(zoom_filter(moments,job['width'],job['height']))
+        if options.speed!=1: filters.append(f'setpts=(PTS-STARTPTS)/{options.speed}')
+        filters.append(f"ass=filename='{d/'captions.ass'}'")
+        audio=['-c:a','copy'] if options.speed==1 else ['-af',f'atempo={options.speed}','-c:a','aac','-b:a','160k']
+        ff(['-i',str(d/'edited.mp4'),'-vf',','.join(filters),'-c:v','libx264','-threads','1','-preset','veryfast','-tune','zerolatency','-crf','21','-pix_fmt','yuv420p',*audio,'-movflags','+faststart',str(d/'final.tmp.mp4')])
         os.replace(d/'final.tmp.mp4',d/'final.mp4')
-        update(j,status='done',progress=100,message='Seu Reels está pronto.',captions=cues)
+        update(j,status='done',progress=100,message='Seu vídeo está pronto.',captions=cues,output_seconds=float(probe(d/'final.mp4')['format']['duration']),applied_zoom=moments)
     except Exception as e: fail(j,e)
 
 def fail(j,e):
@@ -149,12 +209,14 @@ def fail(j,e):
 def cut_video(j,source,d,keep):
     # Bound decoder/encoder queues: never keep all trimmed source branches in RAM.
     width=jobs[j].get('width',1080);height=jobs[j].get('height',1920)
+    fit=jobs[j].get('framing','contain')
+    geometry=(f'scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height}' if fit=='cover' else f'scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=0x091715')
     parts=[]
     for i,(a,b) in enumerate(keep):
         update(j,progress=25+int(25*i/len(keep)),message=f'Cortando trecho {i+1} de {len(keep)}…')
         part=d/f'part-{i:03d}.mkv'
         ff(['-ss',str(a),'-i',str(source),'-t',str(b-a),'-map','0:v:0','-map','0:a:0',
-            '-vf',f'scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=0x091715,setsar=1,fps=30',
+            '-vf',geometry+',setsar=1,fps=30',
             '-af','aresample=48000','-ac','2','-c:v','libx264','-threads','1','-preset','ultrafast','-tune','zerolatency',
             '-crf','18','-pix_fmt','yuv420p','-c:a','pcm_s16le','-avoid_negative_ts','make_zero',str(part)])
         parts.append(part)
@@ -184,6 +246,7 @@ def process(j,review):
         update(j,original_seconds=duration,edited_seconds=edited,cuts=max(0,len(keep)-1),progress=25,message='Removendo pausas e tratando áudio…')
         cut_video(j,source,d,keep)
         update(j,edited_seconds=float(probe(d/'edited.mp4')['format']['duration']))
+        zoom_moments([],jobs[j]['edited_seconds'],EditOptions(**jobs[j].get('options',{})))
         update(j,progress=60,message='Transcrevendo a fala em português…')
         ff(['-i',str(d/'edited.mp4'),'-vn','-ac','1','-ar','16000',str(d/'voice.wav')])
         cues=json.loads(run([sys.executable,str(ROOT/'transcribe_task.py'),str(d/'voice.wav')])[0])
@@ -242,12 +305,15 @@ async def security(request,call_next):
 def health(): return {'ffmpeg':bool(shutil.which('ffmpeg')),'transcription':'Whisper local','retention_hours':24}
 
 @app.post('/api/jobs')
-async def upload(request:Request,review:bool=False,resolution:Literal['1080','720']='1080'):
+async def upload(request:Request,review:bool=False,resolution:Literal['1080','720']='1080',format:Literal['reels','story','feed','square']='reels',framing:Literal['contain','cover']='contain',options:str='{}'):
     if request.headers.get('x-file-ext','').lower() not in ['mp4','mov']: raise HTTPException(415,'Use MP4 ou MOV.')
+    try: edit_options=EditOptions.model_validate_json(options)
+    except ValueError: raise HTTPException(422,'Ajustes de edição inválidos.')
+    width,height=output_size(resolution,format)
     with guard:
         if sum(x['status'] in ['uploading','queued','processing','exporting'] for x in jobs.values())>=2: raise HTTPException(429,'A fila está cheia. Aguarde a edição atual.')
         if len(jobs)>=10: raise HTTPException(429,'Limite de arquivos temporários atingido. Exclua um projeto.')
-        j=secrets.token_hex(24); cancel_events[j]=threading.Event(); jobs[j]={'id':j,'created':time.time(),'status':'uploading','progress':0,'message':'Recebendo vídeo…','captions':[],'resolution':resolution,'width':720 if resolution=='720' else 1080,'height':1280 if resolution=='720' else 1920}
+        j=secrets.token_hex(24); cancel_events[j]=threading.Event(); jobs[j]={'id':j,'created':time.time(),'status':'uploading','progress':0,'message':'Recebendo vídeo…','captions':[],'resolution':resolution,'width':width,'height':height,'format':format,'framing':framing,'options':edit_options.model_dump()}
     d=DATA/j; d.mkdir(mode=0o700); size=0
     try:
         with (d/'input').open('wb') as out:
@@ -287,7 +353,9 @@ class Cue(BaseModel):
     start:float=Field(ge=0,allow_inf_nan=False)
     end:float=Field(gt=0,allow_inf_nan=False)
     text:str=Field(min_length=1,max_length=160)
-class Export(BaseModel): captions:list[Cue]=Field(min_length=1,max_length=2500)
+class Export(BaseModel):
+    captions:list[Cue]=Field(min_length=1,max_length=2500)
+    options:EditOptions|None=None
 
 @app.post('/api/jobs/{j}/export')
 def export(j:str,body:Export):
@@ -298,7 +366,10 @@ def export(j:str,body:Export):
         for c in body.captions:
             if c.end<=c.start or c.start<previous or c.end>job['edited_seconds']+0.15: raise HTTPException(422,'Tempos de legenda inválidos.')
             previous=c.end
-        update(j,status='queued',message='Exportação na fila…')
+        options=body.options or EditOptions(**job.get('options',{}))
+        try: zoom_moments([c.model_dump() for c in body.captions],job['edited_seconds'],options)
+        except ValueError as e: raise HTTPException(422,str(e))
+        update(j,status='queued',message='Exportação na fila…',options=options.model_dump())
     with guard: job_futures[j]=pool.submit(execute_job,j,render,[c.model_dump() for c in body.captions])
     return {'ok':True}
 

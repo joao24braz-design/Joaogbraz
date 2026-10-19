@@ -1,17 +1,33 @@
-# JG Reels AI
+# JG Reels AI 1.1
 
-Editor pessoal web com FFmpeg e Whisper local: upload MP4/MOV, cortes de pausas, áudio normalizado, legendas em português, revisão opcional e exportação MP4 H.264/AAC 1080×1920.
+Estúdio pessoal: https://jg-reels-ai.onrender.com (protegido por senha). Render gratuito, sem APIs pagas. O serviço pode adormecer e a edição usa CPU limitada. Nenhuma atualização de plano contratada.
 
-Aplicativo: https://jg-reels-ai.onrender.com — acesso protegido por senha. As credenciais são entregues ao proprietário fora deste repositório.
+## Arquitetura
 
-## Hospedagem gratuita
+FastAPI serve HTML responsivo e recebe uploads MP4/MOV em fluxo. Um único trabalhador executa FFmpeg e Whisper tiny local CPU int8 em subprocessos canceláveis. Upload até 300 MB, até 10 minutos, entrada até 4K, dois trabalhos na fila e dez projetos temporários. Sem banco de dados. Um processo Uvicorn.
 
-Um único serviço Docker no Render, plan free. Modelo Whisper tiny incluído na imagem. Transcrição em subprocesso para liberar memória antes da exportação. Nenhuma API de IA paga. Recursos sujeitos às limitações de CPU, memória, disponibilidade e uso do plano gratuito do provedor. Não existe garantia de operação ilimitada ou suporte a vídeos longos nesse plano. Suspensão por inatividade pode demorar a reabrir e apaga os arquivos temporários.
+Detecção de silêncios abaixo de -35 dB por 600 ms, preservando margens de fala de 140/180 ms. Cortes sequenciais limitam memória. Vídeo intermediário usa x264 ultrafast CRF18; ruído leve e volume são tratados uma vez após concatenar. A transcrição ocorre no vídeo cortado e na velocidade original. Legendas são agrupadas a partir dos tempos das palavras; podem ser corrigidas antes ou depois da primeira exportação.
 
-## Execução local
+## Opções de edição
 
-`docker compose up --build -d` e abrir http://localhost:8000. Para acesso externo configurar JG_PASSWORD, JG_HOSTS e HTTPS. No Render, RENDER_EXTERNAL_HOSTNAME é reconhecido automaticamente. Sem disco pago. Limite de upload 300 MB/10 minutos; recomenda-se começar com Reels curtos. Fila com um trabalhador e dez projetos temporários. Arquivos expiram em 24h ou em reinícios.
+- Modo automático: velocidade 1×, legenda Premium média off-white/cobre e zoom automático por palavras e frases de destaque. No modo personalizado, o zoom pode ser desligado.
+- Modo personalizado: 1× até 2× em passos de 0,1, preservando o tom da voz com atempo; tamanho pequeno/médio/grande; modelos Premium, Limpo ou Caixa; cores de texto e destaque.
+- Reels e Stories 9:16 com margens de legenda diferentes; feed 4:5 ou quadrado 1:1. Largura 1080 ou 720 pixels; imagem inteira com margens ou preenchimento com corte central.
+- Zoom central suave de até 10%. Automático seleciona até quatro momentos por palavras-chave e pontuação, sem compreensão semântica completa ou rastreamento de rosto. Personalizado aceita até oito intervalos em segundos do vídeo cortado antes de acelerar. Não há garantia de zoom quando nenhuma pista é encontrada.
+- Alterações de estilo, zoom e velocidade podem ser reexportadas sem repetir cortes/transcrição. Formato, resolução e enquadramento são definidos no envio e exigem novo upload para mudar.
 
-## Validação
+O relógio canônico das legendas permanece no vídeo cortado, antes de acelerar. Na exportação, o mesmo fator divide timestamps do vídeo e das legendas e acelera o áudio. A prévia de revisão usa a velocidade original. ASS aplica tamanho e cor no vídeo real; a amostra HTML é apenas amostra de estilo. Saída H.264, AAC, yuv420p e MP4 faststart. Zoom e 1080p aumentam o tempo de exportação.
 
-Ver VALIDACAO.md. Teste de edição real na implantação concluído com MP4 baixado e decodificado. Voz humana em português e Android real aguardam validação de uso. Não adiciona música nem publica no Instagram.
+## Limites
+
+Whisper tiny pode errar nomes e termos jurídicos; revisão é recomendada. Música e ruído podem confundir detecção de silêncio. Corte central e zoom podem esconder elementos periféricos. Não há linha do tempo para arrastar clipes, rastreamento facial ou edição semântica por serviço pago. Android real e precisão com fala humana não foram medidos automaticamente.
+
+## Operação e privacidade
+
+Docker: `docker compose up --build -d`. Alternativa: Python 3.12, FFmpeg com libass e fonte DejaVu Sans, `pip install -r requirements.txt`, `uvicorn app:app --host 127.0.0.1 --port 8000 --workers 1`.
+
+Render usa Dockerfile, porta 8000, JG_PASSWORD e RENDER_EXTERNAL_HOSTNAME. Autenticação Basic sob HTTPS; nunca colocar senha na URL. Arquivos em pasta por ID aleatório de 192 bits, sem envio para APIs externas de transcrição. Não persistir data é intencional: reinícios e implantações apagam todos os projetos. Expiração após 24h mais até um minuto, salvo trabalhos ativos. Cancelar encerra subprocessos e libera a fila. Baixar resultados antes de atualizar.
+
+## Testes
+
+`python test_critical.py` valida fluxo original com legendas controladas. `python test_options.py` valida formatos, aceleração, preservação de frequência de áudio, zoom, estilos, cores, rejeição de parâmetros inválidos, decodificação e download. `python test_cancel.py` valida cancelamento real. `python test_memory.py` mede processamento com entrada 4K e zoom 1080p. São necessários httpx e numpy para testes. Esses testes não medem acurácia do Whisper.

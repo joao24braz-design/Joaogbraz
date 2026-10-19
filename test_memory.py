@@ -14,7 +14,8 @@ def measured(args,timeout=1800):
     return original_run(args,timeout)
 app.run=measured
 app.cut_video(j,source,d,[(0,1.5),(3,4.5),(6,7.5),(9,10.5)])
-app.render(j,[{'start':0,'end':1.4,'text':'Teste de vídeo 4K com cortes.'}])
+app.jobs[j].update(width=1080,height=1920,edited_seconds=6,options={'zoom':'auto'})
+app.render(j,[{'start':0,'end':1.4,'text':'Atenção ao prazo importante!'}])
 assert app.jobs[j]['status']=='done',app.jobs[j]
 info=app.probe(d/'final.mp4');duration=float(info['format']['duration']);assert 5.9<duration<6.3,duration
 app.ff(['-i',str(d/'final.mp4'),'-f','null','-'])
