@@ -19,3 +19,5 @@ Teste local de integração com FFmpeg real: Reels 720×1280, velocidade 1× sem
 Cancelamento de subprocesso ativo e trabalho na fila passou novamente. Entrada 2160×3840 com quatro cortes e zoom automático em saída 1080×1920: pico FFmpeg 152,5 MB, processo Python 33,7 MB; saída decodificada sem erro.
 
 Interface: sintaxe JavaScript validada. Teste em navegador local indisponível: Chromium não instalado e download bloqueado/truncado no ambiente. Não foi alegada validação visual no Android.
+
+PUBLICAÇÃO 1.1 VERIFICADA: commit 220f73f7cd562466fc336f2c1ca2e61358162e2f, deploy dep-dbb27a6i0phs73b86tl0 (live). Teste real em produção com Whisper: upload, cortes, transcrição (4 blocos), correção de legenda, exportação Stories 720×1280, legenda grande/caixa branca, zoom manual e velocidade 1,2×. Entrada 10,835 s → cortes 7,1 s → saída 5,866 s. MP4 H.264/AAC baixado (181978 bytes), decodificado e quadro extraído. Projeto de teste excluído após verificação. Nenhuma medição de acurácia de português humano ou Android real.
