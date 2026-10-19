@@ -1,4 +1,4 @@
-# JG Reels AI 1.1
+# JG Reels AI 1.2
 
 Estúdio pessoal: https://jg-reels-ai.onrender.com (protegido por senha). Render gratuito, sem APIs pagas. O serviço pode adormecer e a edição usa CPU limitada. Nenhuma atualização de plano contratada.
 
@@ -12,11 +12,11 @@ Detecção de silêncios abaixo de -35 dB por 600 ms, preservando margens de fal
 
 - Modo automático: velocidade 1×, legenda Premium média off-white/cobre e zoom automático por palavras e frases de destaque. No modo personalizado, o zoom pode ser desligado.
 - Modo personalizado: 1× até 2× em passos de 0,1, preservando o tom da voz com atempo; tamanho pequeno/médio/grande; modelos Premium, Limpo ou Caixa; cores de texto e destaque.
-- Reels e Stories 9:16 com margens de legenda diferentes; feed 4:5 ou quadrado 1:1. Largura 1080 ou 720 pixels; imagem inteira com margens ou preenchimento com corte central.
-- Zoom central suave de até 10%. Automático seleciona até quatro momentos por palavras-chave e pontuação, sem compreensão semântica completa ou rastreamento de rosto. Personalizado aceita até oito intervalos em segundos do vídeo cortado antes de acelerar. Não há garantia de zoom quando nenhuma pista é encontrada.
+- Reels e Stories 9:16 com margens de legenda diferentes; feed 4:5 ou quadrado 1:1. Largura 2160 (4K), 1080 ou 720 pixels; imagem inteira com margens ou preenchimento com corte central.
+- Zoom central suave de até 10%. A opção de direcionar ao rosto usa OpenCV local em subprocesso, até três quadros reduzidos por momento, para localizar o maior rosto frontal e aproximar até 18%. Trechos sem detecção ficam sem zoom e geram aviso. A detecção não identifica pessoas nem acompanha o rosto continuamente. Automático seleciona até quatro momentos por palavras-chave e pontuação, sem compreensão semântica completa ou rastreamento contínuo. Personalizado aceita até oito intervalos em segundos do vídeo cortado antes de acelerar. Não há garantia de zoom quando nenhuma pista é encontrada.
 - Alterações de estilo, zoom e velocidade podem ser reexportadas sem repetir cortes/transcrição. Formato, resolução e enquadramento são definidos no envio e exigem novo upload para mudar.
 
-O relógio canônico das legendas permanece no vídeo cortado, antes de acelerar. Na exportação, o mesmo fator divide timestamps do vídeo e das legendas e acelera o áudio. A prévia de revisão usa a velocidade original. ASS aplica tamanho e cor no vídeo real; a amostra HTML é apenas amostra de estilo. Saída H.264, AAC, yuv420p e MP4 faststart. Zoom e 1080p aumentam o tempo de exportação.
+O relógio canônico das legendas permanece no vídeo cortado, antes de acelerar. Na exportação, o mesmo fator divide timestamps do vídeo e das legendas e acelera o áudio. A prévia de revisão usa a velocidade original. ASS aplica tamanho e cor no vídeo real; a amostra HTML é apenas amostra de estilo. Saída H.264, AAC, yuv420p e MP4 faststart. Zoom e resoluções maiores aumentam o tempo de exportação. Reels/Stories 4K usam 2160×3840; feed usa 2160×2700 e quadrado 2160×2160. Aumentar a resolução não cria detalhes ausentes no original.
 
 ## Limites
 
@@ -30,4 +30,4 @@ Render usa Dockerfile, porta 8000, JG_PASSWORD e RENDER_EXTERNAL_HOSTNAME. Auten
 
 ## Testes
 
-`python test_critical.py` valida fluxo original com legendas controladas. `python test_options.py` valida formatos, aceleração, preservação de frequência de áudio, zoom, estilos, cores, rejeição de parâmetros inválidos, decodificação e download. `python test_cancel.py` valida cancelamento real. `python test_memory.py` mede processamento com entrada 4K e zoom 1080p. São necessários httpx e numpy para testes. Esses testes não medem acurácia do Whisper.
+`python test_critical.py` valida fluxo original com legendas controladas. `python test_options.py` valida formatos, aceleração, preservação de frequência de áudio, zoom, estilos, cores, rejeição de parâmetros inválidos, decodificação e download. `python test_cancel.py` valida cancelamento real. `python test_face_4k.py` valida detecção real de rosto fora do centro, fallback sem rosto e exportação 2160×3840 (usa o retrato de domínio público Grace Hopper distribuído com matplotlib apenas como fixture de teste). `python test_memory.py` mede processamento com entrada 4K e zoom 1080p. São necessários httpx e numpy para testes. Esses testes não medem acurácia do Whisper.

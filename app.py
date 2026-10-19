@@ -26,6 +26,7 @@ class EditOptions(BaseModel):
     text_color:str=Field(default='#F7F5F4',pattern=r'^#[0-9a-fA-F]{6}$')
     accent_color:str=Field(default='#C49C7B',pattern=r'^#[0-9a-fA-F]{6}$')
     zoom:Literal['off','auto','manual']='off'
+    zoom_target:Literal['center','face']='center'
     zoom_moments:list[ZoomMoment]=Field(default_factory=list,max_length=8)
 
 def output_size(resolution,format):
@@ -54,9 +55,17 @@ def zoom_moments(cues,duration,options):
     return sorted(chosen,key=lambda m:m['start'])
 
 def zoom_filter(moments,width,height):
-    # One frame in/out, centered zoom up to 10%, smooth entrance and exit.
-    terms=[f"if(between(on,{m['start']*30:.3f},{m['end']*30:.3f}),0.10*sin(PI*(on-{m['start']*30:.3f})/{(m['end']-m['start'])*30:.3f}),0)" for m in moments]
-    return "zoompan=z='1+"+'+'.join(terms)+f"':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s={width}x{height}:fps=30"
+    terms=[];xs=[];ys=[]
+    for m in moments:
+        start=m['start']*30;end=m['end']*30;length=end-start
+        amount=.18 if 'face_x' in m else .10
+        terms.append(f"if(between(on,{start:.3f},{end:.3f}),{amount}*sin(PI*(on-{start:.3f})/{length:.3f}),0)")
+        if 'face_x' in m:
+            xs.append(f"if(between(on,{start:.3f},{end:.3f}),{m['face_x']:.6f}-.5,0)")
+            ys.append(f"if(between(on,{start:.3f},{end:.3f}),{m['face_y']:.6f}-.5,0)")
+    cx='0.5' + ('+' + '+'.join(xs) if xs else '')
+    cy='0.5' + ('+' + '+'.join(ys) if ys else '')
+    return "zoompan=z='1+"+'+'.join(terms)+f"':x='max(0,min(iw-iw/zoom,iw*({cx})-iw/zoom/2))':y='max(0,min(ih-ih/zoom,ih*({cy})-ih/zoom/2))':d=1:s={width}x{height}:fps=30"
 
 cancel_events={}; active_processes={}; job_futures={}; worker_context=threading.local()
 
@@ -189,6 +198,16 @@ def render(j,cues):
         update(j,status='exporting',progress=85,message='Incorporando legendas e exportando MP4…')
         job=get(j);options=EditOptions(**job.get('options',{}))
         moments=zoom_moments(cues,job['edited_seconds'],options)
+        requested_moments=len(moments)
+        if options.zoom_target=='face' and moments:
+            update(j,message='Localizando o rosto nos momentos de zoom…')
+            moments=json.loads(run([sys.executable,str(ROOT/'face_task.py'),str(d/'edited.mp4'),json.dumps(moments)],300)[0])
+            update(j,message='Incorporando legendas e exportando MP4…')
+        zoom_note=''
+        if options.zoom_target=='face' and requested_moments>len(moments):
+            zoom_note=f'Rosto não detectado em {requested_moments-len(moments)} trecho(s); esses trechos ficaram sem zoom.'
+        elif options.zoom!='off' and not requested_moments:
+            zoom_note='Nenhum momento de zoom selecionado. Use momentos manuais para indicar onde aproximar.'
         ass_file(d/'captions.ass',cues,options,job.get('format','reels'))
         filters=[]
         if moments: filters.append(zoom_filter(moments,job['width'],job['height']))
@@ -197,7 +216,7 @@ def render(j,cues):
         audio=['-c:a','copy'] if options.speed==1 else ['-af',f'atempo={options.speed}','-c:a','aac','-b:a','160k']
         ff(['-i',str(d/'edited.mp4'),'-vf',','.join(filters),'-c:v','libx264','-threads','1','-preset','veryfast','-tune','zerolatency','-crf','21','-pix_fmt','yuv420p',*audio,'-movflags','+faststart',str(d/'final.tmp.mp4')])
         os.replace(d/'final.tmp.mp4',d/'final.mp4')
-        update(j,status='done',progress=100,message='Seu vídeo está pronto.',captions=cues,output_seconds=float(probe(d/'final.mp4')['format']['duration']),applied_zoom=moments)
+        update(j,status='done',progress=100,message='Seu vídeo está pronto.',captions=cues,output_seconds=float(probe(d/'final.mp4')['format']['duration']),applied_zoom=moments,zoom_note=zoom_note)
     except Exception as e: fail(j,e)
 
 def fail(j,e):
@@ -305,7 +324,7 @@ async def security(request,call_next):
 def health(): return {'ffmpeg':bool(shutil.which('ffmpeg')),'transcription':'Whisper local','retention_hours':24}
 
 @app.post('/api/jobs')
-async def upload(request:Request,review:bool=False,resolution:Literal['1080','720']='1080',format:Literal['reels','story','feed','square']='reels',framing:Literal['contain','cover']='contain',options:str='{}'):
+async def upload(request:Request,review:bool=False,resolution:Literal['1080','720','2160']='1080',format:Literal['reels','story','feed','square']='reels',framing:Literal['contain','cover']='contain',options:str='{}'):
     if request.headers.get('x-file-ext','').lower() not in ['mp4','mov']: raise HTTPException(415,'Use MP4 ou MOV.')
     try: edit_options=EditOptions.model_validate_json(options)
     except ValueError: raise HTTPException(422,'Ajustes de edição inválidos.')
