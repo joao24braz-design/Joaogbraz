@@ -63,3 +63,11 @@ PASSOU: interface com cinco reexportações reais, incluindo slider de zoom 50%,
 PASSOU: FFmpeg real com padrão estático e zoom de 50%. Largura do marcador antes/entrada/meio/último frame/saída: zoom seco 40/60/60/60/40 pixels; suave 40/46/60/46/40 nos frames correspondentes de rampa. Intervalos adjacentes mantiveram 50% na fronteira sem duplicação. Valor inválido de transição rejeitado.
 
 PASSOU: teste de interface com cinco reexportações reais; seleção de zoom seco enviada à API e preservada na tela e nas opções do projeto após cortes manuais e nova exportação.
+
+## Publicações — 1.7
+
+PASSOU: API com filtros, datas, descarte de item antigo, duplicação, cache, falha parcial, validação de intervalo, parsers RSS/JSON e restrição de hosts. Consulta de rede real em 19/10/2026: quatro canais oficiais responderam, 16 pautas retornadas; fonte e data mantidas. Não mede relevância semântica nem valida o mérito jurídico das matérias.
+
+PASSOU: DOM JavaScript com Canvas nativo: carrossel de cinco páginas a partir de ideia, foto carregada localmente, edição/paginação, adicionar/excluir página, ZIP/PNG, bloqueio de título que não cabe, notícia vinculada com fonte na descrição, Stories/quadrado e rascunho local. ZIP reaberto com Python, CRC íntegro, cinco PNGs 1080×1350 decodificados com Pillow e TXT com descrição/hashtags. Arte inspecionada visualmente. Não equivale a teste visual em Android real.
+
+PENDENTE POR ESCOPO GRATUITO: geração livre de imagens por IA, interpretação da foto, redação por modelo de linguagem e pesquisa jurídica aprofundada com análise/cruzamento da íntegra. Os recursos entregues são composição visual, roteiros por modelo e pesquisa de canais oficiais, rotulados na interface. Nenhuma API paga configurada.

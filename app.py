@@ -620,4 +620,7 @@ def delete(j:str):
         shutil.rmtree(DATA/j,ignore_errors=True); del jobs[j]; cancel_events.pop(j,None)
     return {'ok':True}
 
+from publications import router as publications_router
+app.include_router(publications_router)
+
 app.mount('/',StaticFiles(directory=ROOT/'static',html=True),name='interface')

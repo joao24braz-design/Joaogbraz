@@ -63,3 +63,13 @@ Tempos são sempre relativos à prévia após cortes automáticos, antes da velo
 ## Transição do zoom — 1.6
 
 Escolha Suave (aproxima e volta progressivamente) ou Seco (entra imediatamente na porcentagem escolhida e retorna de uma vez ao final). A escolha aparece também no modo automático, serve para centro/rosto e é preservada ao reaplicar ajustes. Suave permanece como padrão dos projetos sem escolha explícita. Intervalos adjacentes não somam suas intensidades no frame compartilhado. `python test_zoom_transition.py` mede os frames reais do FFmpeg.
+
+## Publicações — 1.7
+
+`/publications.html` cria artes PNG em Canvas, sem API/modelo generativo. Stories e capas de Reels 1080×1920, posts 1080×1080 e carrosséis 1080×1350 de até 10 páginas. Ideia vira título e roteiro por modelos editoriais; os textos podem ser revistos página a página. Descrição e hashtags são sugestões por tema, sem promessa de alcance. Não há interpretação semântica de imagem, geração de fotografias, copywriting por LLM ou análise jurídica automática. A capa de Reels é uma imagem, não um vídeo.
+
+Fotos JPEG/PNG/WebP de até 12 MB são decodificadas e reduzidas no navegador; não são enviadas ao servidor. Títulos/textos que não cabem bloqueiam o download em vez de serem cortados. ZIP sem compressão contém PNGs numerados e TXT com descrição/hashtags/fonte, com CRC32 por arquivo. Rascunho textual é salvo em localStorage no dispositivo; a foto não é persistida e precisa ser selecionada novamente após fechar a página. Somente o filtro da pesquisa é enviado ao servidor.
+
+`GET /api/publications/research?q=&days=30` consulta quatro canais oficiais: API pública Incra e RSS Câmara Agropecuária/Meio Ambiente e STJ. Busca é limitada aos itens disponíveis nesses canais (30 do Incra e quantidade disponível nos RSS), filtrados por palavras, data e tema; não é busca exaustiva nem pesquisa jurisprudencial aprofundada. Fontes, falhas e datas são visíveis. Janela 1–90 dias, fuso São Paulo, cache de 15 minutos, deduplicação por URL, quatro conexões concorrentes, timeout de 10 s por fonte, limite de 2 MB/resposta, hosts e redirects HTTPS restritos. Não considera lei vigente só porque uma manchete menciona projeto. A seleção de notícia apenas vincula título/data/link ao rascunho; não analisa a íntegra. Sem custos de APIs.
+
+Testes: `python test_publications.py`; `npm install --prefix /tmp/jg-pub-test jsdom @napi-rs/canvas --no-audit --no-fund` e `NODE_PATH=/tmp/jg-pub-test/node_modules node test_publications.cjs`. Não são dependências de produção.
