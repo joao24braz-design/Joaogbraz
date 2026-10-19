@@ -25,3 +25,5 @@ PUBLICAÇÃO 1.1 VERIFICADA: commit 220f73f7cd562466fc336f2c1ca2e61358162e2f, de
 ## Rosto e 4K — versão 1.2
 
 Teste local com FFmpeg/OpenCV reais e retrato Grace Hopper fora do centro. Opção zoom_target=face com momento manual detectou âncora x=0,289 / y=0,211. Vídeo final 2160×3840 H.264/AAC, legenda incorporada, download HTTP e decodificação completa passaram. Sem rosto, exportação concluiu com zero zoom e aviso explícito. Pico de subprocesso 239,8 MB + Python 62,7 MB no teste. Os quatro formatos/estilos/velocidades da regressão 1.1 passaram novamente. Não representa garantia de detecção em perfis, oclusões ou movimentos rápidos, nem de memória para todo codec de entrada.
+
+PRODUÇÃO 1.2: deploy dep-dbb2cjgm7kps73aplnt0, commit eb27d45017ab5409bb29621104fe0dca9e0d2986 publicado como live. Teste remoto com Whisper real: entrada 6,0 s → corte 3,739 s; detecção real de rosto fora do centro (x=0,2875/y=0,2102), zoom, legendas e MP4 final 2160×3840 H.264/AAC. Download de 1812737 bytes, decodificação completa e quadro extraído passaram. Projeto de teste excluído. Nenhum upgrade de plano ou API paga.
