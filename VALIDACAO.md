@@ -79,3 +79,11 @@ PASSOU: integração DOM/Canvas real com oito opções (sete renderizações dis
 ## Referências visuais — 1.9
 
 PASSOU: integração DOM/Canvas com uma imagem, adição incremental de mais quatro e lote de cinco; rejeição da sexta, lote de seis, formato inválido e falha de decodificação. Reordenação altera a sequência, remoção individual/total atualiza contagem e painel, referência ampliada é sincronizada entre aba e editor. Criar com referências preserva ideia, título e estilo. Anotações persistem localmente e referências não são enviadas à pesquisa. Navegação por teclado e regressão dos modelos favoritos, descrição visual, foto, PNG/ZIP e formatos passaram. Sem teste em aparelho Android real.
+
+## IA de marketing — 2.0
+
+PASSOU: cinco testes de API com respostas simuladas: configuração, limites, consentimento separado de imagens, transporte REST, validação JSON e erros. Teste DOM/Canvas: proposta antes de aplicação, visual opcional, preservação em erro e bloqueio de clique duplicado. Regressão de referências/favoritos/PNG/ZIP/formatos passou.
+
+REDE REAL em 19/10/2026: projeto Free Tier sem faturamento confirmado no Google AI Studio; segredo configurado no Render. 3.8 Flash apresentou timeout/503 alta demanda, 2.5 Flash retornou 404 para conta nova. 3.1 Flash-Lite respondeu e gerou roteiro de cinco páginas em português sobre preparação para arrendamento rural. A primeira resposta exigiu normalização de hashtags e descarte de observações de referência quando nenhuma imagem foi enviada; corrigidos. Nova chamada recebeu 503 de alta demanda, tratado com mensagem específica e preservação do rascunho. Não mede consistência jurídica ou garantia de disponibilidade.
+
+PASSOU, REDE REAL: nova geração com cinco referências JPEG sintéticas levou 13 segundos, retornou cinco páginas, descrição, hashtags e observações. Aplicação do resultado real no editor Canvas permitiu exportar PNG/ZIP. ZIP reaberto, CRC íntegro e cinco PNGs 1080×1350 decodificados. Imagens de usuários não foram utilizadas. Sem teste visual em Android real.

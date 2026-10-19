@@ -66,7 +66,7 @@ Escolha Suave (aproxima e volta progressivamente) ou Seco (entra imediatamente n
 
 ## Publicações — 1.7
 
-`/publications.html` cria artes PNG em Canvas, sem API/modelo generativo. Stories e capas de Reels 1080×1920, posts 1080×1080 e carrosséis 1080×1350 de até 10 páginas. Ideia vira título e roteiro por modelos editoriais; os textos podem ser revistos página a página. Descrição e hashtags são sugestões por tema, sem promessa de alcance. Não há interpretação semântica de imagem, geração de fotografias, copywriting por LLM ou análise jurídica automática. A capa de Reels é uma imagem, não um vídeo.
+`/publications.html` cria artes PNG em Canvas, sem API/modelo generativo. Stories e capas de Reels 1080×1920, posts 1080×1080 e carrosséis 1080×1350 de até 10 páginas. Ideia vira título e roteiro por modelos editoriais; os textos podem ser revistos página a página. Descrição e hashtags são sugestões por tema, sem promessa de alcance. O modo por modelos não interpreta imagens nem usa LLM; a opção de estratégia com IA da versão 2.0 é descrita abaixo. Não há geração de fotografias nem análise jurídica automática. A capa de Reels é uma imagem, não um vídeo.
 
 Fotos JPEG/PNG/WebP de até 12 MB são decodificadas e reduzidas no navegador; não são enviadas ao servidor. Títulos/textos que não cabem bloqueiam o download em vez de serem cortados. ZIP sem compressão contém PNGs numerados e TXT com descrição/hashtags/fonte, com CRC32 por arquivo. Rascunho textual é salvo em localStorage no dispositivo; a foto não é persistida e precisa ser selecionada novamente após fechar a página. Somente o filtro da pesquisa é enviado ao servidor.
 
@@ -86,4 +86,26 @@ Até 30 favoritos nomeados em `jg-publication-models-v1` no localStorage. Guarda
 
 Aba Referências aceita 1–5 imagens JPEG/PNG/WebP, até 12 MB e 45 megapixels cada. Seleção múltipla ou incremental, limite de cinco no total, miniaturas, ampliação, reordenação e remoção individual/total. Lote inválido não é adicionado parcialmente. Decodificação e redução até 1600 px no navegador, JPEG em memória e URLs blob; nenhum upload ao servidor. URLs são revogadas ao remover imagens. Transparência recebe fundo branco.
 
-Criar com estas referências abre o editor e mantém um painel com miniaturas e imagem ampliada, sem mudar a foto da capa, textos ou estilo. Anotações sobre o que aproveitar ficam no localStorage; imagens duram somente até recarregar/fechar a página. As referências não entram nos PNGs/ZIPs gerados, nos modelos favoritos ou no rascunho persistido. Não há leitura automática, OCR ou reprodução do layout por IA. A navegação de abas aceita setas, Home e End.
+Criar com estas referências abre o editor e mantém um painel com miniaturas e imagem ampliada, sem mudar a foto da capa, textos ou estilo. Anotações sobre o que aproveitar ficam no localStorage; imagens duram somente até recarregar/fechar a página. As referências não entram nos PNGs/ZIPs gerados, nos modelos favoritos ou no rascunho persistido. A consulta local não interpreta imagens. Na versão 2.0, análise editorial opcional exige autorização específica de envio à IA; não reproduz layouts automaticamente. A navegação de abas aceita setas, Home e End.
+
+## IA de estratégia editorial — 2.0
+
+Integração opcional em `marketing_ai.py` e `static/marketing-ui.js`, com Google Gemini `gemini-3.1-flash-lite`. Não substitui nem aciona o gerador de modelos silenciosamente. Briefing: ideia, público, objetivo, tom, formato, descrição visual, anotações e dados da notícia vinculada. Retorno: ângulo, justificativa de gancho, CTA, páginas, descrição, hashtags, sugestão visual e pontos de verificação. Usuário revisa a proposta e escolhe aplicar; visual só muda com opção marcada. Falhas preservam o rascunho.
+
+Projeto Google Free Tier configurado sem vincular faturamento; chave guardada somente no Environment do servidor. Modelo 3.1 Flash-Lite escolhido após 3.8 Flash apresentar timeout/alta demanda e 2.5 Flash ser recusado para conta nova. Respostas reais ainda exigem revisão editorial. Provedor pode recusar por cota ou alta demanda; não há upgrade automático.
+
+### Configuração necessária para ativação
+
+1. Google AI Studio: https://aistudio.google.com/api-keys. Criar chave em projeto **Free Tier sem faturamento vinculado**, com acesso à Gemini API. Não adicionar cartão nem habilitar pagamento. Disponibilidade e limites dependem da conta/região/modelo; conferir no painel do Google. A chave por si só não prova que o projeto é gratuito.
+2. Guardar a chave como segredo `GEMINI_API_KEY` no Environment do serviço Render. Não colocar em GitHub, frontend, arquivos de exemplo ou mensagens do chat.
+3. Após confirmar o projeto Free Tier, configurar `JG_GEMINI_FREE_PROJECT_CONFIRMED=true` e `JG_MARKETING_AI_ENABLED=true`. Essas flags registram uma confirmação administrativa; o aplicativo não tem permissão para inspecionar a vinculação de faturamento do projeto. Não trocar a chave por uma de projeto pago sem reavaliar custos.
+4. Fazer teste real, revisar os textos e só então publicar a integração. Preparar o resultado de vídeo atual para download antes de reiniciar o serviço.
+
+Sem chave/flags, status declara pendência e geração retorna 503. Uma chamada por vez, intervalo local de 30 s, máximo local de 10 tentativas por dia UTC (contagem em memória, reinício a redefine), sem retry/fallback de modelo ou ferramenta paga. Esses limites são controles de uso, não garantia de custo para chaves de projetos pagos. HTTP 429 do provedor informa cota indisponível; nenhum upgrade é feito. URL do provedor fixa, segredo em cabeçalho, redirects recusados, timeout de 75 s, resposta limitada e validada por Pydantic, contagem exata de páginas. Cota gratuita e modelo verificados na documentação oficial em 19/10/2026.
+
+O briefing só sai do servidor após consentimento na interface. As referências exigem consentimento adicional: reduzidas para até 960 px/JPEG de até 300 KB e limite de cinco. A foto da capa e os vídeos não são enviados. Google informa que dados da camada gratuita podem ser usados para melhorar seus produtos; esse fato aparece antes do envio. Sem referências, o modelo não pode alegar tê-las analisado. Imagens e texto são usados apenas para compor a requisição; não são registrados pelo módulo. Rascunho aplicado permanece no localStorage já existente.
+
+Não há grounding/pesquisa de íntegra nem geração de fotografias nesta integração. A notícia vinculada fornece título, resumo, data e link, não prova jurídica. Prompt orienta não inventar leis, decisões, números ou promessas de alcance, distinguir projeto de lei de norma vigente e produzir conteúdo informativo. Isso não garante conformidade jurídica/OAB nem dispensa revisão humana. Análise visual busca atributos gerais, sem copiar textos/logos das referências.
+
+Testes: `python test_marketing_ai.py` e `NODE_PATH=/tmp/jg-pub-test/node_modules node test_marketing_ui.cjs`. Sem chamada ao Google durante os testes.
+
