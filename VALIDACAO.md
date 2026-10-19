@@ -79,3 +79,11 @@ PASSOU: integração DOM/Canvas real com oito opções (sete renderizações dis
 ## Referências visuais — 1.9
 
 PASSOU: integração DOM/Canvas com uma imagem, adição incremental de mais quatro e lote de cinco; rejeição da sexta, lote de seis, formato inválido e falha de decodificação. Reordenação altera a sequência, remoção individual/total atualiza contagem e painel, referência ampliada é sincronizada entre aba e editor. Criar com referências preserva ideia, título e estilo. Anotações persistem localmente e referências não são enviadas à pesquisa. Navegação por teclado e regressão dos modelos favoritos, descrição visual, foto, PNG/ZIP e formatos passaram. Sem teste em aparelho Android real.
+
+## IA de marketing — integração preparada, não ativada
+
+PASSOU, COM RESPOSTAS SIMULADAS: API bloqueada sem configuração, status sem segredo, exigência de consentimentos de texto/imagem, validação de referências, briefing, tamanho de requisição, serialização REST, resposta JSON validada, erro de resposta incompleta, cota e limite local. Nenhuma chamada real ao Google e nenhuma chave criada/configurada.
+
+PASSOU, COM RESPOSTAS SIMULADAS: UI define público/objetivo/tom, bloqueia sem consentimento, mostra proposta sem alterar rascunho, aplica após revisão, preserva visual salvo por padrão e aceita sugestão visual apenas sob seleção explícita. Erro de provedor preserva rascunho; clique duplicado bloqueado; botão desabilitado sem configuração. Regressão do editor de publicações, referências, favoritos, PNG/ZIP e formatos passou.
+
+PENDENTE: chave de projeto Google AI Studio Free Tier sem faturamento, configuração segura no servidor, geração real e avaliação editorial com material genérico, análise real de referências e publicação. Sem afirmar qualidade estratégica validada ou camada ativa. Produção mantida na versão 1.9.

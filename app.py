@@ -623,4 +623,7 @@ def delete(j:str):
 from publications import router as publications_router
 app.include_router(publications_router)
 
+from marketing_ai import router as marketing_router
+app.include_router(marketing_router)
+
 app.mount('/',StaticFiles(directory=ROOT/'static',html=True),name='interface')
