@@ -153,8 +153,8 @@ def cut_video(j,source,d,keep):
         part=d/f'part-{i:03d}.mkv'
         ff(['-ss',str(a),'-i',str(source),'-t',str(b-a),'-map','0:v:0','-map','0:a:0',
             '-vf','scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=0x091715,setsar=1,fps=30',
-            '-af','aresample=48000','-ac','2','-c:v','libx264','-threads','1','-preset','veryfast','-tune','zerolatency',
-            '-crf','21','-pix_fmt','yuv420p','-c:a','pcm_s16le','-avoid_negative_ts','make_zero',str(part)])
+            '-af','aresample=48000','-ac','2','-c:v','libx264','-threads','1','-preset','ultrafast','-tune','zerolatency',
+            '-crf','18','-pix_fmt','yuv420p','-c:a','pcm_s16le','-avoid_negative_ts','make_zero',str(part)])
         parts.append(part)
     listing=d/'parts.txt'
     listing.write_text(''.join(f"file '{p.name}'\n" for p in parts))
