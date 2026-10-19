@@ -93,3 +93,9 @@ PASSOU, REDE REAL: nova geração com cinco referências JPEG sintéticas levou 
 Testes DOM/Canvas: quatro formatos únicos ocultam/desabilitam páginas e controles de múltiplas páginas; briefing IA usa count=1; ZIP contém exatamente um PNG. Voltar ao carrossel preserva cinco páginas anteriores. Quantidades 2,4,6,8,9,10 geradas; botão MP4 com bloqueio de clique duplicado. Regressão do editor, referências e marketing passou.
 
 FFmpeg real: exportação MP4 H.264/yuv420p, 1080×1920, duração 8 s e decodificação completa. API rejeita formato/tamanho inválidos, concorrência e edição de vídeo ativa. Sem teste visual em aparelho Android real.
+
+## Ações de criação de arte — 2.2
+
+PASSOU: DOM com Canvas nativo; rascunho vazio não declara sucesso, descrição simples com ideia cria arte, proposta só muda a arte ao aplicar, gerar visual da proposta muda pixels de verdade, pedido visual por IA aplica automaticamente texto/estilo, prévia recebe rolagem e foco, validação ao lado do botão, falha preserva pixels e conteúdo. Regressões de formatos, referências, favoritos e marketing passaram. Sem teste visual em Android real; navegador remoto bloqueado pela autenticação Basic (ERR_INVALID_AUTH_CREDENTIALS).
+
+Versão 2.1 online validada antes da atualização: endpoint MP4 retornou HTTP 200, H.264 1080×1920/8 s, decodificação completa.

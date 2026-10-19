@@ -115,3 +115,9 @@ Testes: `python test_marketing_ai.py` e `NODE_PATH=/tmp/jg-pub-test/node_modules
 Páginas e controles de paginação aparecem somente em Carrossel, de 2 a 10 páginas. Stories, capa, quadrado e Reels usam uma composição. Ao trocar um carrossel já criado por formato único, só a primeira página fica visível e é exportada; as demais permanecem no rascunho para voltar a Carrossel. Gerar um novo roteiro substitui o conteúdo como antes.
 
 Reels · vídeo MP4 exporta a arte estática vertical em H.264/yuv420p, 1080×1920, 30 fps, 8 segundos, sem áudio/animação. Botão envia apenas a composição PNG ao próprio servidor para FFmpeg; temporários são removidos após a resposta. Não gera filmagens, música ou narração. Limite 10 MB, uma exportação por vez, bloqueada durante edição de vídeo ativa, timeout 50 s. O editor de filmagens continua na aba Edição de vídeo.
+
+## Geração de arte e retorno visível — 2.2
+
+Aplicar proposta e Gerar arte com o visual da proposta renderizam Canvas e levam o foco à prévia. Aplicar mantém o visual escolhido salvo se a sugestão visual não estiver marcada; Gerar arte aplica explicitamente o visual proposto. Gerar arte com IA, junto à descrição visual, envia um briefing autorizado e aplica automaticamente a proposta com visual. Não é geração de fotografias: usa os oito estilos/controles e foto local opcional. Flags/limites/consentimentos existentes continuam valendo.
+
+Ajustes visuais simples continuam por palavras-chave; sem rascunho criam a arte a partir da ideia. Sem ideia ou sem instrução reconhecida, mostram motivo, sem fingir sucesso. A interpretação livre usa o botão com IA. Falhas na renderização aparecem também na prévia; erros na IA preservam a arte anterior. Scripts com versão para evitar combinação de HTML/JavaScript antigos após atualização.
