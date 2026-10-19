@@ -28,12 +28,15 @@ class Tests(unittest.TestCase):
   envelope={'candidates':[{'finishReason':'STOP','content':{'parts':[{'text':json.dumps(FIXTURE)}]}}]}
   class Opener:
    def open(inner,request,timeout):
-    self.assertEqual(request.full_url,'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent');self.assertNotIn(ENV['GEMINI_API_KEY'],request.full_url);payload=json.loads(request.data);self.assertEqual(payload['generationConfig']['responseMimeType'],'application/json');self.assertNotIn('tools',payload);self.assertIn('não tem navegação',payload['systemInstruction']['parts'][0]['text']);return io.BytesIO(json.dumps(envelope).encode())
+    self.assertEqual(request.full_url,'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent');self.assertNotIn(ENV['GEMINI_API_KEY'],request.full_url);payload=json.loads(request.data);self.assertEqual(payload['generationConfig']['responseMimeType'],'application/json');self.assertNotIn('tools',payload);self.assertIn('não tem navegação',payload['systemInstruction']['parts'][0]['text']);return io.BytesIO(json.dumps(envelope).encode())
   with patch.dict(os.environ,ENV),patch.object(m.urllib.request,'build_opener',return_value=Opener()):
    result=m.provider(m.Input(**BRIEF));self.assertEqual(len(result.slides),1)
    envelope['candidates'][0]['finishReason']='MAX_TOKENS'
    with self.assertRaises(HTTPException) as e:m.provider(m.Input(**BRIEF))
    self.assertEqual(e.exception.status_code,502)
+ def test_hashtags_normalized(self):
+  fixture={**FIXTURE,'hashtags':['DireitoAgrario','#DireitoRural','DireitoAgrario']}
+  self.assertEqual(m.Output(**fixture).hashtags,['#DireitoAgrario','#DireitoRural'])
  def test_provider_quota_and_network_errors_are_clear(self):
   class Opener:
    def open(self,*a,**k):raise urllib.error.HTTPError('https://generativelanguage.googleapis.com/',429,'quota',{},None)
