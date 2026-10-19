@@ -75,3 +75,7 @@ PENDENTE POR ESCOPO GRATUITO: geração livre de imagens por IA, interpretação
 ## Estilos e modelos favoritos — 1.8
 
 PASSOU: integração DOM/Canvas real com oito opções (sete renderizações distintas sem fotografia enviada), aplicação de descrição reconhecida, rejeição informativa de descrição não reconhecida, fonte/alinhamento/título/cor, favorito salvo e reaplicado com preservação do conteúdo, recuperação de favorito e rascunho após reinicialização do JavaScript e exclusão do favorito. Regressão de PNG, ZIP, foto local, carrossel, texto excedente, formatos e notícia vinculada passou. Favoritos não incluem foto nem texto das páginas. Prévia dos estilos inspecionada em mosaico PNG. Sem teste em aparelho Android real.
+
+## Referências visuais — 1.9
+
+PASSOU: integração DOM/Canvas com uma imagem, adição incremental de mais quatro e lote de cinco; rejeição da sexta, lote de seis, formato inválido e falha de decodificação. Reordenação altera a sequência, remoção individual/total atualiza contagem e painel, referência ampliada é sincronizada entre aba e editor. Criar com referências preserva ideia, título e estilo. Anotações persistem localmente e referências não são enviadas à pesquisa. Navegação por teclado e regressão dos modelos favoritos, descrição visual, foto, PNG/ZIP e formatos passaram. Sem teste em aparelho Android real.

@@ -81,3 +81,9 @@ Oito escolhas visuais: Editorial, Claro, Fotografia, Noturno, Campo/sálvia, Cob
 O balão de descrição aplica palavras-chave documentadas ao clicar em Aplicar descrição visual: estilos, claro/escuro, alinhamento, fonte, título grande/compacto e cores cobre/dourado/branco/#HEX. Mostra as instruções reconhecidas e avisa sobre as não interpretadas; não é geração livre por IA. A descrição sozinha não altera a arte enquanto não aplicada.
 
 Até 30 favoritos nomeados em `jg-publication-models-v1` no localStorage. Guarda estilo, ajustes, descrição, formato, contagem para futuras gerações, assinatura e foco da foto; exclui foto e textos. Carregar aplica à prévia preservando conteúdo e imagem atuais. Não há sincronização entre dispositivos. Rascunho e ajustes são restaurados após recarregar a página. Salvar denuncia falha de armazenamento sem afirmar que houve sucesso.
+
+## Referências visuais — 1.9
+
+Aba Referências aceita 1–5 imagens JPEG/PNG/WebP, até 12 MB e 45 megapixels cada. Seleção múltipla ou incremental, limite de cinco no total, miniaturas, ampliação, reordenação e remoção individual/total. Lote inválido não é adicionado parcialmente. Decodificação e redução até 1600 px no navegador, JPEG em memória e URLs blob; nenhum upload ao servidor. URLs são revogadas ao remover imagens. Transparência recebe fundo branco.
+
+Criar com estas referências abre o editor e mantém um painel com miniaturas e imagem ampliada, sem mudar a foto da capa, textos ou estilo. Anotações sobre o que aproveitar ficam no localStorage; imagens duram somente até recarregar/fechar a página. As referências não entram nos PNGs/ZIPs gerados, nos modelos favoritos ou no rascunho persistido. Não há leitura automática, OCR ou reprodução do layout por IA. A navegação de abas aceita setas, Home e End.
