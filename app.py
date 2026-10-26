@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 
 ROOT=Path(__file__).parent
 DATA=Path(os.getenv('JG_DATA',str(ROOT/'data'))).resolve(); DATA.mkdir(parents=True,exist_ok=True,mode=0o700)
-MAX_BYTES=300*1024*1024; TTL=24*3600
+MAX_BYTES=2*1024*1024*1024; TTL=24*3600
 jobs={}; guard=threading.RLock(); pool=ThreadPoolExecutor(max_workers=1)
 model=None
 
@@ -513,11 +513,17 @@ async def security(request,call_next):
     return response
 
 @app.get('/api/health')
-def health(): return {'ffmpeg':bool(shutil.which('ffmpeg')),'transcription':'Whisper local','retention_hours':24}
+def health(): return {'ffmpeg':bool(shutil.which('ffmpeg')),'transcription':'Whisper local','retention_hours':24,'max_upload_bytes':MAX_BYTES}
 
 @app.post('/api/jobs')
 async def upload(request:Request,review:bool=False,resolution:Literal['1080','720','2160']='1080',format:Literal['reels','story','feed','square']='reels',framing:Literal['contain','cover']='contain',options:str='{}'):
     if request.headers.get('x-file-ext','').lower() not in ['mp4','mov']: raise HTTPException(415,'Use MP4 ou MOV.')
+    declared_size=request.headers.get('content-length')
+    if declared_size is not None:
+        try: declared_size=int(declared_size)
+        except ValueError: raise HTTPException(400,'Tamanho de arquivo inválido.')
+        if declared_size<0: raise HTTPException(400,'Tamanho de arquivo inválido.')
+        if declared_size>MAX_BYTES: raise HTTPException(413,'O limite é 2 GB.')
     try: edit_options=EditOptions.model_validate_json(options)
     except ValueError: raise HTTPException(422,'Ajustes de edição inválidos.')
     width,height=output_size(resolution,format)
@@ -530,7 +536,7 @@ async def upload(request:Request,review:bool=False,resolution:Literal['1080','72
         with (d/'input').open('wb') as out:
             async for chunk in request.stream():
                 size+=len(chunk)
-                if size>MAX_BYTES: raise HTTPException(413,'O limite é 300 MB.')
+                if size>MAX_BYTES: raise HTTPException(413,'O limite é 2 GB.')
                 out.write(chunk)
         if size<1000: raise HTTPException(400,'Arquivo vazio ou inválido.')
         update(j,status='queued',message='Aguardando processamento…')
@@ -669,3 +675,4 @@ async def publication_reel(request:Request):
     finally:publication_reel_lock.release()
 
 app.mount('/',StaticFiles(directory=ROOT/'static',html=True),name='interface')
+

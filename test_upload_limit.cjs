@@ -1,0 +1,7 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert');
+const html=fs.readFileSync('static/index.html','utf8');const source=html.slice(html.indexOf("$('start').onclick="),html.indexOf("$('cancel').onclick="));
+for(const [size,name,accepted] of [[301*1024**2,'v.mp4',true],[2*1024**3,'v.mov',true],[2*1024**3+1,'v.mp4',false],[1024,'v.exe',false]]){
+ const nodes=new Map(),sent=[],messages=[];const file={name,size};function $(id){if(!nodes.has(id))nodes.set(id,{files:[file],value:'1080',checked:false,removeAttribute(){}});return nodes.get(id)}
+ const context={$ ,busy:false,job:null,currentData:null,newFileSelected:false,requestEpoch:0,cancelPending:false,readOptions:()=>({}),localStorage:{removeItem(){}},lock(){},message:t=>messages.push(t),watch(){},applyChanges(){},URLSearchParams,XMLHttpRequest:class{constructor(){this.upload={}}open(){}setRequestHeader(){}send(f){sent.push(f)}}};vm.runInNewContext(source,context);$('start').onclick();assert.equal(sent.length,accepted?1:0);if(!accepted)assert(messages.at(-1).includes('2 GB'));
+}
+assert(html.includes('até 2 GB'));console.log('PASS: browser accepts 301 MB and 2 GB; rejects 2 GB + 1 byte and invalid format.');
