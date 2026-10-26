@@ -12,6 +12,8 @@ from pydantic import BaseModel, Field
 ROOT=Path(__file__).parent
 DATA=Path(os.getenv('JG_DATA',str(ROOT/'data'))).resolve(); DATA.mkdir(parents=True,exist_ok=True,mode=0o700)
 MAX_BYTES=2*1024*1024*1024; TTL=24*3600
+UPLOAD_CHUNK_BYTES=8*1024*1024
+upload_chunk_locks={}
 jobs={}; guard=threading.RLock(); pool=ThreadPoolExecutor(max_workers=1)
 model=None
 
@@ -107,6 +109,7 @@ def finish_cancel(j):
         if j not in jobs: return
         shutil.rmtree(DATA/j,ignore_errors=True)
         jobs[j].update(status='cancelled',progress=0,message='Processamento cancelado. Você pode enviar outro vídeo.')
+        upload_chunk_locks.pop(j,None)
 
 def execute_job(j,fn,*args):
     worker_context.job=j
@@ -470,10 +473,11 @@ async def cleaner():
     while True:
         await asyncio.sleep(60)
         with guard:
-            expired=[j for j,v in jobs.items() if time.time()-v['created']>TTL and v['status'] not in ['processing','queued','exporting','uploading','cancelling']]
+            expired=[j for j,v in jobs.items() if time.time()-v.get('upload_activity',v['created'])>TTL and v['status'] not in ['processing','queued','exporting','cancelling'] and not (upload_chunk_locks.get(j) and upload_chunk_locks[j].locked())]
             for j in expired:
                 shutil.rmtree(DATA/j,ignore_errors=True); del jobs[j]
                 cancel_events.pop(j,None)
+                upload_chunk_locks.pop(j,None)
 
 @asynccontextmanager
 async def lifespan(app):
@@ -551,6 +555,12 @@ def cancel(j:str):
     with guard:
         job=get(j)
         if job['status'] in ['cancelled','cancelling']: return {'status':job['status']}
+        if job['status']=='uploading' and 'upload_total' in job:
+            cancel_events[j].set()
+            jobs[j].update(status='cancelling',message='Cancelando envio…')
+            chunk_lock=upload_chunk_locks.get(j)
+            if not chunk_lock or not chunk_lock.locked():finish_cancel(j)
+            return {'status':jobs[j]['status']}
         if job['status'] not in ['queued','processing','exporting']:
             raise HTTPException(409,'Este processamento já terminou. Atualize o resultado.')
         cancel_events[j].set()
@@ -571,6 +581,77 @@ def status(j:str):
         job['suggested_zoom']=zoom_moments(job['captions'],job['edited_seconds'],EditOptions(zoom='auto'))
     else:job['suggested_zoom']=[]
     return job
+
+class UploadSession(BaseModel):
+    client_id:str=Field(pattern=r'^[a-f0-9]{32}$')
+    name:str=Field(min_length=1,max_length=255)
+    size:int=Field(ge=1000,le=MAX_BYTES)
+    fingerprint:str=Field(pattern=r'^[a-f0-9]{64}$')
+
+@app.post('/api/uploads')
+def begin_upload(data:UploadSession,review:bool=False,resolution:Literal['1080','720','2160']='1080',format:Literal['reels','story','feed','square']='reels',framing:Literal['contain','cover']='contain',options:str='{}'):
+    if data.name.rsplit('.',1)[-1].lower() not in ['mp4','mov']:raise HTTPException(415,'Use MP4 ou MOV.')
+    try:edit_options=EditOptions.model_validate_json(options)
+    except ValueError:raise HTTPException(422,'Ajustes de edição inválidos.')
+    width,height=output_size(resolution,format)
+    with guard:
+        for j,v in jobs.items():
+            if v.get('upload_client_id')==data.client_id:
+                if v.get('upload_total')!=data.size or v.get('upload_fingerprint')!=data.fingerprint:raise HTTPException(409,'O arquivo não corresponde a esta sessão.')
+                return {'id':j}
+        if sum(v['status'] in ['uploading','queued','processing','exporting'] for v in jobs.values())>=2:raise HTTPException(429,'A fila está cheia. Aguarde a edição atual.')
+        if len(jobs)>=10:raise HTTPException(429,'Limite de arquivos temporários atingido. Exclua um projeto.')
+        j=secrets.token_hex(24);(DATA/j).mkdir(mode=0o700);(DATA/j/'input').touch(mode=0o600)
+        cancel_events[j]=threading.Event();upload_chunk_locks[j]=threading.Lock()
+        jobs[j]={'id':j,'created':time.time(),'upload_activity':time.time(),'status':'uploading','progress':0,'message':'Recebendo vídeo em partes…','captions':[],'resolution':resolution,'width':width,'height':height,'format':format,'framing':framing,'options':edit_options.model_dump(),'upload_client_id':data.client_id,'upload_total':data.size,'upload_received':0,'upload_fingerprint':data.fingerprint,'upload_review':review}
+    return {'id':j}
+
+@app.put('/api/uploads/{j}')
+async def upload_chunk(j:str,request:Request,offset:int):
+    with guard:
+        info=get(j);chunk_lock=upload_chunk_locks.get(j)
+        if info['status']!='uploading' or not chunk_lock:raise HTTPException(409,'O envio não está disponível.')
+        if not chunk_lock.acquire(blocking=False):raise HTTPException(409,'Um trecho ainda está sendo recebido. Aguarde.')
+    start=info['upload_received'];written=0;target=DATA/j/'input'
+    try:
+        if offset!=start:raise HTTPException(409,'O trecho já foi recebido ou está fora de ordem. Consulte o progresso para retomar.')
+        with target.open('r+b') as out:
+            out.seek(start)
+            try:
+                async for chunk in request.stream():
+                    if cancel_events[j].is_set():raise JobCancelled()
+                    written+=len(chunk)
+                    if written>UPLOAD_CHUNK_BYTES or start+written>info['upload_total']:raise HTTPException(413,'Trecho maior que o tamanho permitido.')
+                    out.write(chunk)
+                if not written:raise HTTPException(400,'Trecho vazio.')
+                with guard:
+                    if cancel_events[j].is_set():raise JobCancelled()
+                    jobs[j].update(upload_received=start+written,upload_activity=time.time(),progress=round((start+written)/info['upload_total']*100),message='Enviando vídeo…')
+            except BaseException:
+                out.truncate(start)
+                raise
+        return {'id':j,'upload_received':start+written}
+    except JobCancelled:raise HTTPException(409,'Envio cancelado.')
+    finally:
+        chunk_lock.release()
+        if cancel_events.get(j) and cancel_events[j].is_set():finish_cancel(j)
+
+@app.post('/api/uploads/{j}/complete')
+def complete_upload(j:str):
+    with guard:
+        info=get(j)
+        if 'upload_total' not in info:raise HTTPException(409,'Este projeto não usa envio retomável.')
+        if info['status'] in ['queued','processing','exporting','review','done','error']:return {'id':j}
+        if info['status']!='uploading':raise HTTPException(409,'Envio cancelado.')
+        chunk_lock=upload_chunk_locks.get(j)
+        if not chunk_lock or not chunk_lock.acquire(blocking=False):raise HTTPException(409,'Aguarde o último trecho.')
+        try:
+            if info['upload_received']!=info['upload_total']:raise HTTPException(409,'O envio ainda está incompleto.')
+            if (DATA/j/'input').stat().st_size!=info['upload_total']:raise HTTPException(409,'O arquivo recebido está incompleto.')
+            jobs[j].update(status='queued',progress=0,message='Vídeo recebido. Processamento continua no servidor, mesmo com esta tela fechada.')
+            job_futures[j]=pool.submit(execute_job,j,process,info['upload_review'])
+        finally:chunk_lock.release()
+    return {'id':j}
 
 class Cue(BaseModel):
     start:float=Field(ge=0,allow_inf_nan=False)
@@ -623,7 +704,7 @@ def delete(j:str):
     with guard:
         job=get(j)
         if job['status'] in ['uploading','queued','processing','exporting','cancelling']: raise HTTPException(409,'Aguarde o processamento para excluir.')
-        shutil.rmtree(DATA/j,ignore_errors=True); del jobs[j]; cancel_events.pop(j,None)
+        shutil.rmtree(DATA/j,ignore_errors=True); del jobs[j]; cancel_events.pop(j,None); upload_chunk_locks.pop(j,None)
     return {'ok':True}
 
 from publications import router as publications_router

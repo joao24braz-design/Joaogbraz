@@ -103,3 +103,10 @@ Versão 2.1 online validada antes da atualização: endpoint MP4 retornou HTTP 2
 ## Direção de arte editorial — 2.3
 
 PASSOU: cinco layouts reais em Canvas nativo, PNGs distintos, escolha manual de composição, expressão em destaque e preservação durante edição de texto; ZIP exportado. Mosaico de cinco páginas inspecionado visualmente; corrigida colisão da numeração com título e agrupados os pontos da lista. Regressão de referências, favoritos, PNG/ZIP, formatos únicos e carrossel, marketing e ações de arte passou. Resposta real anterior do Google aplicada e exportada com os novos layouts. Novo prompt editorial ainda requer amostragem real após implantação; não há garantia de limite de palavras nem validação jurídica automática.
+
+
+## Upload retomável e reconexão — 2.4
+
+PASSOU: API real com início idempotente, trechos confirmados, queda parcial/rollback, offset incorreto, reenvio após ACK perdido, conclusão idempotente/fila única, limites, concorrência e cancelamento. Vídeo sintético real enviado em duas partes com queda intermediária; hash integral coincidiu e FFmpeg processou/decodificou MP4, sem consulta HTTP de progresso durante processamento. Testes do limite total 2 GiB continuam passando; limite integral testado com contador/sink, não envio real de 2 GiB pela hospedagem.
+
+PASSOU: DOM e motor de transferência: clique real no botão de envio, ACK perdido, consulta de offset e retomada sem duplicação, pausa em segundo plano simulada, recarregamento recupera processamento sem arquivo, polling após falha, preservação de edição de projeto pronto, resposta antiga ignorada e cancelar envio pausado. Eventos de lifecycle são simulados, sem teste de suspensão pelo Android em aparelho real.

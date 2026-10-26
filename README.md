@@ -4,7 +4,7 @@ Estúdio pessoal: https://jg-reels-ai.onrender.com (protegido por senha). Render
 
 ## Arquitetura
 
-FastAPI serve HTML responsivo e recebe uploads MP4/MOV em fluxo. Um único trabalhador executa FFmpeg e Whisper base local CPU int8 em subprocessos canceláveis. Upload até 300 MB, até 10 minutos, entrada até 4K, dois trabalhos na fila e dez projetos temporários. Sem banco de dados. Um processo Uvicorn.
+FastAPI serve HTML responsivo e recebe uploads MP4/MOV em fluxo. Um único trabalhador executa FFmpeg e Whisper base local CPU int8 em subprocessos canceláveis. Upload até 2 GB, até 10 minutos, entrada até 4K, dois trabalhos na fila e dez projetos temporários. Sem banco de dados. Um processo Uvicorn.
 
 Detecção de silêncios abaixo de -35 dB: modo Natural a partir de 600 ms com margens de 140/180 ms; modo Dinâmico a partir de 300 ms com margens de 80/100 ms. A sequência da fala é mantida; o modo dinâmico pode exigir conferência de palavras sussurradas ou ruído variável. Cortes sequenciais limitam memória. Vídeo intermediário usa x264 ultrafast CRF18; ruído leve e volume são tratados uma vez após concatenar. A transcrição ocorre no vídeo cortado e na velocidade original. Legendas são agrupadas a partir dos tempos das palavras; podem ser corrigidas antes ou depois da primeira exportação.
 
@@ -127,3 +127,12 @@ Ajustes visuais simples continuam por palavras-chave; sem rascunho criam a arte 
 Composição refeita com capa/manchete, editorial, lista de até três pontos, frase em destaque e fechamento. Em Editorial/Fotografia/Degradê, páginas internas alternam off-white e verde escuro; estilos de cor escolhidos explicitamente mantêm sua paleta. Foto local aparece na capa e no fechamento com degradê para preservar detalhes. Títulos maiores; corpo sem serifa; destaques em cobre; mais espaço negativo e rodapé discreto. Composição e expressão exata destacada são editáveis por página, persistem e sobrevivem à revisão do texto.
 
 A resposta da IA inclui layout e highlight opcionais e recebe limites editoriais mais curtos: capa até 14 palavras no corpo, miolo até 30, fechamento até 18. São instruções de geração, sem cortar textos que já existam. Transbordo continua bloqueando downloads. Resultados antigos continuam compatíveis e recebem composição automática. Não adiciona imagens geradas ou chamadas pagas.
+
+
+## Envio retomável e retorno do segundo plano — 2.4
+
+A tela usa sessão de upload criada antes da transferência; envia trechos de 4 MiB (servidor permite até 8 MiB), confirma offsets e retoma pelo contador do servidor. Queda no meio do trecho desfaz somente esse trecho. Reenvio fora de ordem é rejeitado; criação e conclusão são idempotentes. Limite total 2 GiB. Vídeo não é persistido inteiro no armazenamento do navegador: somente ID, parâmetros e impressão amostrada (tamanho + primeiros/últimos 64 KiB). A impressão ajuda a evitar seleção acidental de outro arquivo, não verifica integralmente o conteúdo.
+
+Mudança de tela pausa a transferência quando o navegador suspende a página; retorno/online retoma automaticamente se o File ainda estiver em memória. Se a aba for descartada/recarregada, é preciso selecionar o mesmo vídeo. Se todos os bytes já chegaram e a resposta final se perdeu, a tela descobre o processamento sem pedir o arquivo de novo. Envio pausado pode ser cancelado. Sessões incompletas expiram 24 horas após a última atividade.
+
+Processamento continua no executor do servidor após confirmação do envio; não depende das consultas da tela. Consultas retomam em visibilitychange/pageshow/online/resume, com timeout e recuperação de erros transitórios. 404 informa expiração/reinício; 401 pede nova autenticação. Respostas antigas não sobrescrevem outro estado e retornar a um projeto concluído preserva ajustes ainda não enviados. Android pode suspender navegador: não há promessa de upload contínuo em segundo plano, notificações nativas ou processamento após reinício do servidor gratuito. Arquivos continuam temporários. Nenhuma infraestrutura paga adicionada.
